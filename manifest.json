@@ -1,45 +1,31 @@
 {
   "$schema": "./manifest.schema.json",
-  "name": "Extension Boilerplate",
-  "key": "extension-boilerplate",
+  "name": "bwl_dienstplanung",
+  "key": "bwl-dienstplanung",
   "version": "1.0.0",
-  "description": "A boilerplate extension demonstrating ChurchTools extension capabilities",
+  "description": "Zeigt ChurchTools-Events an, liest angeforderte Dienste einer Dienstkategorie und ermöglicht Dienstbesetzern die Meldung ihrer Verfügbarkeit",
   "author": {
-    "name": "Your Name",
-    "email": "your.email@example.com",
-    "url": "https://your-website.com"
-  },
-  "homepage": "https://github.com/yourname/extension-boilerplate",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/yourname/extension-boilerplate.git"
+    "name": "bwl21"
   },
   "license": "MIT",
-  "icon": "https://your-website.com/extension-icon.png",
-  "images": ["https://your-website.com/screenshot1.png"],
   "extensionPoints": [
     {
       "id": "main",
       "entryPoint": "main",
-      "title": "Statistics Dashboard",
-      "description": "Person statistics by status"
+      "title": "Dienstplanung",
+      "description": "Event-Übersicht mit Diensten und Verfügbarkeitsmeldung"
     },
     {
       "id": "admin",
       "entryPoint": "admin",
-      "title": "Extension Settings",
-      "description": "Configure extension settings"
-    },
-    {
-      "id": "appointment-dialog-detail",
-      "entryPoint": "appointmentDetails",
-      "title": "Appointment Details",
-      "description": "Shows appointment as json in appointment dialog"
+      "title": "Dienstplanung Einstellungen",
+      "description": "Konfiguration der Dienstkategorie und weiterer Einstellungen"
     }
   ],
   "permissions": [
     "churchcal view",
-    "churchdb view"
+    "churchdb view",
+    "churchservice view"
   ],
   "minChurchToolsVersion": "3.0.0"
 }

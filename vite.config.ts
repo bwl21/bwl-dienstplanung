@@ -57,6 +57,11 @@ export default ({ mode }) => {
         // For development, use the ccm path
         // For production library builds, use relative paths so ChurchTools can control deployment location
         base: `/extensions/${key}/`,
+        server: {
+            host: '0.0.0.0',
+            port: 5173,
+            allowedHosts: true,
+        },
         build: isDevelopment ? {} : (buildMode === 'advanced' ? advancedBuildConfig : simpleBuildConfig),
         plugins: isDevelopment ? [] : [
             // Copy manifest.json to dist after build

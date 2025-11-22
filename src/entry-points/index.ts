@@ -31,12 +31,6 @@ export const entryPointRegistry: Record<string, EntryPointLoader> = {
     // Admin configuration entry point
     admin: () => import('./admin'),
 
-    // Main module entry point
+    // Main module entry point - Dienstplanung
     main: () => import('./main'),
-
-    // Appointment details entry point
-    appointmentDetails: () => import('./appointment-details'),
-
-    // Add your custom entry points here:
-    // myFeature: () => import('./my-feature'),
 };

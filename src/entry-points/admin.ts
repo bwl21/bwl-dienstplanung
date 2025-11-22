@@ -13,23 +13,24 @@ import {
 /**
  * Admin Configuration Entry Point
  *
- * Simple demo: Configure background color for all entry points.
- * Settings are stored in ChurchTools extension key-value store.
+ * Konfiguration der Dienstkategorie für die Dienstplanung.
+ * Einstellungen werden im ChurchTools Key-Value Store gespeichert.
  */
 
-interface BackgroundColorSetting {
+interface DienstplanungSettings {
     key: string;
     value: string;
 }
 
-const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY }) => {
-    console.log('[Admin] Initializing');
+const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, churchtoolsClient }) => {
+    console.log('[Admin] Initializing Dienstplanung Settings');
     console.log('[Admin] Extension info:', data.extensionInfo);
 
     let moduleId: number | null = null;
     let settingsCategory: CustomModuleDataCategory | null = null;
-    let backgroundColorValue: CustomModuleDataValue | null = null;
-    let currentBackgroundColor = '#ffffff';
+    let serviceCategoryValue: CustomModuleDataValue | null = null;
+    let currentServiceCategoryId = '';
+    let serviceCategories: any[] = [];
 
     // UI State
     let isLoading = true;
@@ -44,18 +45,21 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY }) =>
             // Step 1: Get the extension module
             const extensionModule = await getOrCreateModule(
                 KEY,
-                data.extensionInfo?.name || 'Extension',
-                data.extensionInfo?.description || 'A ChurchTools Extension'
+                data.extensionInfo?.name || 'Dienstplanung',
+                data.extensionInfo?.description || 'Dienstplanung Extension'
             );
             moduleId = extensionModule.id;
             console.log('[Admin] Extension module:', extensionModule);
 
-            // Step 2: Get or create the settings category
+            // Step 2: Load service categories from ChurchTools
+            await loadServiceCategories();
+
+            // Step 3: Get or create the settings category
             settingsCategory = await getOrCreateSettingsCategory();
             console.log('[Admin] Settings category:', settingsCategory);
 
-            // Step 3: Load background color setting
-            await loadBackgroundColor(settingsCategory.id);
+            // Step 4: Load service category setting
+            await loadServiceCategorySetting(settingsCategory.id);
 
             isLoading = false;
             errorMessage = '';
@@ -65,6 +69,18 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY }) =>
             isLoading = false;
             errorMessage = error instanceof Error ? error.message : 'Failed to initialize';
             render();
+        }
+    }
+
+    // Load service categories from ChurchTools API
+    async function loadServiceCategories() {
+        try {
+            const response = await churchtoolsClient.get('/api/event/servicegroups');
+            serviceCategories = response.data || [];
+            console.log('[Admin] Service categories loaded:', serviceCategories);
+        } catch (error) {
+            console.error('[Admin] Failed to load service categories:', error);
+            serviceCategories = [];
         }
     }
 
@@ -93,40 +109,40 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY }) =>
         return created;
     }
 
-    // Load background color from key-value store
-    async function loadBackgroundColor(categoryId: number): Promise<void> {
-        const values = await getCustomDataValues<BackgroundColorSetting>(categoryId, moduleId!);
+    // Load service category setting from key-value store
+    async function loadServiceCategorySetting(categoryId: number): Promise<void> {
+        const values = await getCustomDataValues<DienstplanungSettings>(categoryId, moduleId!);
 
-        // Find backgroundColor value
-        const bgColorValue = values.find((v) => v.key === 'backgroundColor');
+        // Find serviceCategory value
+        const serviceCatValue = values.find((v) => v.key === 'serviceCategory');
 
-        if (bgColorValue) {
+        if (serviceCatValue) {
             // Store the original value object for updates
-            backgroundColorValue = bgColorValue as any;
-            currentBackgroundColor = bgColorValue.value || '#ffffff';
+            serviceCategoryValue = serviceCatValue as any;
+            currentServiceCategoryId = serviceCatValue.value || '';
         }
     }
 
-    // Save background color to key-value store
-    async function saveBackgroundColor(color: string): Promise<void> {
+    // Save service category to key-value store
+    async function saveServiceCategory(categoryId: string): Promise<void> {
         if (!moduleId || !settingsCategory) {
             throw new Error('Extension not initialized');
         }
 
         const valueData = JSON.stringify({
-            key: 'backgroundColor',
-            value: color,
+            key: 'serviceCategory',
+            value: categoryId,
         });
 
-        if (backgroundColorValue) {
+        if (serviceCategoryValue) {
             // Update existing value
             await updateCustomDataValue(
                 settingsCategory.id,
-                backgroundColorValue.id,
+                serviceCategoryValue.id,
                 { value: valueData },
                 moduleId
             );
-            backgroundColorValue.value = valueData;
+            serviceCategoryValue.value = valueData;
         } else {
             // Create new value
             await createCustomDataValue(
@@ -138,10 +154,10 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY }) =>
             );
 
             // Reload to get the created value
-            await loadBackgroundColor(settingsCategory.id);
+            await loadServiceCategorySetting(settingsCategory.id);
         }
 
-        currentBackgroundColor = color;
+        currentServiceCategoryId = categoryId;
         render();
     }
 
@@ -178,36 +194,42 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY }) =>
                           : `
                     <!-- Settings Form -->
                     <div style="background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem;">
-                        <h2 style="margin: 0 0 1rem 0; font-size: 1.1rem;">Background Color</h2>
+                        <h2 style="margin: 0 0 1rem 0; font-size: 1.1rem;">Dienstkategorie</h2>
                         <p style="margin: 0 0 1rem 0; color: #666; font-size: 0.9rem;">
-                            Choose a background color for all extension views
+                            Wählen Sie die Dienstkategorie aus, deren Dienste in der Dienstplanung angezeigt werden sollen.
                         </p>
 
-                        <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1.5rem;">
-                            <input
-                                type="color"
-                                id="color-picker"
-                                value="${currentBackgroundColor}"
-                                style="width: 80px; height: 40px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;"
-                            />
-                            <input
-                                type="text"
-                                id="color-input"
-                                value="${currentBackgroundColor}"
-                                placeholder="#ffffff"
-                                style="flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-family: monospace;"
-                            />
+                        <div style="margin-bottom: 1.5rem;">
+                            <label for="service-category-select" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">
+                                Dienstkategorie:
+                            </label>
+                            <select
+                                id="service-category-select"
+                                style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
+                            >
+                                <option value="">-- Bitte wählen --</option>
+                                ${serviceCategories.map(cat => `
+                                    <option value="${cat.id}" ${cat.id.toString() === currentServiceCategoryId ? 'selected' : ''}>
+                                        ${cat.name || cat.bezeichnung || `Kategorie ${cat.id}`}
+                                    </option>
+                                `).join('')}
+                            </select>
                         </div>
 
-                        <div style="padding: 2rem; background: ${currentBackgroundColor}; border: 1px solid #ddd; border-radius: 4px; text-align: center; margin-bottom: 1.5rem;">
-                            <span style="color: #333; font-weight: 500;">Preview</span>
-                        </div>
+                        ${currentServiceCategoryId ? `
+                            <div style="padding: 1rem; background: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 4px; margin-bottom: 1.5rem;">
+                                <strong>Aktuell ausgewählt:</strong> 
+                                ${serviceCategories.find(c => c.id.toString() === currentServiceCategoryId)?.name || 
+                                  serviceCategories.find(c => c.id.toString() === currentServiceCategoryId)?.bezeichnung || 
+                                  'Kategorie ' + currentServiceCategoryId}
+                            </div>
+                        ` : ''}
 
                         <button
                             id="save-btn"
                             style="width: 100%; padding: 0.75rem; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; font-weight: 500;"
                         >
-                            Save Settings
+                            Einstellungen speichern
                         </button>
 
                         <div id="status-message" style="margin-top: 1rem; padding: 0.75rem; border-radius: 4px; display: none;"></div>
@@ -216,8 +238,8 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY }) =>
                     <!-- Info Box -->
                     <div style="margin-top: 1.5rem; padding: 1rem; background: #f8f9fa; border-left: 4px solid #007bff; border-radius: 4px;">
                         <p style="margin: 0; font-size: 0.9rem; color: #666;">
-                            <strong>Note:</strong> Settings are stored in the ChurchTools key-value store.
-                            ${import.meta.env.MODE === 'development' ? 'Running in development mode.' : ''}
+                            <strong>Hinweis:</strong> Die Einstellungen werden im ChurchTools Key-Value Store gespeichert.
+                            ${import.meta.env.MODE === 'development' ? 'Entwicklungsmodus aktiv.' : ''}
                         </p>
                     </div>
                 `
@@ -232,64 +254,49 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY }) =>
 
     // Attach event handlers
     function attachEventHandlers() {
-        const colorPicker = element.querySelector('#color-picker') as HTMLInputElement;
-        const colorInput = element.querySelector('#color-input') as HTMLInputElement;
+        const serviceCategorySelect = element.querySelector('#service-category-select') as HTMLSelectElement;
         const saveBtn = element.querySelector('#save-btn') as HTMLButtonElement;
 
-        if (!colorPicker || !colorInput || !saveBtn) return;
-
-        // Sync color picker and input
-        colorPicker.addEventListener('input', (e) => {
-            const color = (e.target as HTMLInputElement).value;
-            colorInput.value = color;
-            updatePreview(color);
-        });
-
-        colorInput.addEventListener('input', (e) => {
-            const color = (e.target as HTMLInputElement).value;
-            if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
-                colorPicker.value = color;
-                updatePreview(color);
-            }
-        });
+        if (!serviceCategorySelect || !saveBtn) return;
 
         // Save button
         saveBtn.addEventListener('click', async () => {
-            await handleSave(colorInput.value);
+            await handleSave(serviceCategorySelect.value);
         });
     }
 
-    // Update preview
-    function updatePreview(color: string) {
-        const preview = element.querySelector('[style*="Preview"]')?.parentElement;
-        if (preview) {
-            (preview as HTMLElement).style.background = color;
-        }
-    }
-
     // Handle save
-    async function handleSave(color: string) {
+    async function handleSave(categoryId: string) {
         const saveBtn = element.querySelector('#save-btn') as HTMLButtonElement;
         const statusMessage = element.querySelector('#status-message') as HTMLElement;
 
         if (!saveBtn || !statusMessage) return;
 
+        if (!categoryId) {
+            statusMessage.style.display = 'block';
+            statusMessage.style.background = '#fff3cd';
+            statusMessage.style.border = '1px solid #ffeaa7';
+            statusMessage.style.color = '#856404';
+            statusMessage.textContent = '⚠️ Bitte wählen Sie eine Dienstkategorie aus.';
+            return;
+        }
+
         try {
             saveBtn.disabled = true;
-            saveBtn.textContent = 'Saving...';
+            saveBtn.textContent = 'Speichern...';
 
-            await saveBackgroundColor(color);
+            await saveServiceCategory(categoryId);
 
             // Show success message
             statusMessage.style.display = 'block';
             statusMessage.style.background = '#d4edda';
             statusMessage.style.border = '1px solid #c3e6cb';
             statusMessage.style.color = '#155724';
-            statusMessage.textContent = '✓ Settings saved successfully!';
+            statusMessage.textContent = '✓ Einstellungen erfolgreich gespeichert!';
 
             // Emit notification to ChurchTools
             emit('notification:show', {
-                message: 'Settings saved successfully!',
+                message: 'Einstellungen erfolgreich gespeichert!',
                 type: 'success',
                 duration: 3000,
             });
@@ -306,11 +313,11 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY }) =>
             statusMessage.style.border = '1px solid #f5c6cb';
             statusMessage.style.color = '#721c24';
             statusMessage.textContent =
-                '✗ Failed to save: ' +
-                (error instanceof Error ? error.message : 'Unknown error');
+                '✗ Fehler beim Speichern: ' +
+                (error instanceof Error ? error.message : 'Unbekannter Fehler');
         } finally {
             saveBtn.disabled = false;
-            saveBtn.textContent = 'Save Settings';
+            saveBtn.textContent = 'Einstellungen speichern';
         }
     }
 
