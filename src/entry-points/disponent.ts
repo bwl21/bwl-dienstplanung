@@ -148,7 +148,7 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
             endDate.setDate(endDate.getDate() + dateRange);
             const end = endDate.toISOString().split('T')[0];
             
-            const response = await churchtoolsClient.get(`/api/events?from=${today}&to=${end}&limit=100`);
+            const response = await churchtoolsClient.get(`/events?from=${today}&to=${end}&limit=100`);
             events = response.data || [];
             console.log('[Disponent] Loaded events:', events.length);
         } catch (error) {
@@ -160,7 +160,7 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
     // Load services for the configured category
     async function loadServices(): Promise<void> {
         try {
-            const response = await churchtoolsClient.get(`/api/services?servicegroup_id=${serviceCategoryId}`);
+            const response = await churchtoolsClient.get(`/services?servicegroup_id=${serviceCategoryId}`);
             services = response.data || [];
             console.log('[Disponent] Loaded services:', services.length);
         } catch (error) {
@@ -229,7 +229,7 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
     // Load persons
     async function loadPersons(): Promise<void> {
         try {
-            const response = await churchtoolsClient.get('/api/persons?limit=500');
+            const response = await churchtoolsClient.get('/persons?limit=500');
             const personList = response.data || [];
             
             persons.clear();

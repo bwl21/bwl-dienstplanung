@@ -115,7 +115,7 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
     async function loadEvents(): Promise<void> {
         try {
             const today = new Date().toISOString().split('T')[0];
-            const response = await churchtoolsClient.get(`/api/events?from=${today}&limit=50`);
+            const response = await churchtoolsClient.get(`/events?from=${today}&limit=50`);
             events = response.data || [];
             console.log('[Dienstplanung] Loaded events:', events.length);
         } catch (error) {
@@ -127,7 +127,7 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
     // Load services for the configured category
     async function loadServices(): Promise<void> {
         try {
-            const response = await churchtoolsClient.get(`/api/services?servicegroup_id=${serviceCategoryId}`);
+            const response = await churchtoolsClient.get(`/services?servicegroup_id=${serviceCategoryId}`);
             services = response.data || [];
             console.log('[Dienstplanung] Loaded services:', services.length);
         } catch (error) {
