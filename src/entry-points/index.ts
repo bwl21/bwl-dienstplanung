@@ -34,6 +34,9 @@ export const entryPointRegistry: Record<string, EntryPointLoader> = {
     // Main module entry point - Dienstplanung (Mitarbeiter-Ansicht)
     main: () => import('./main'),
 
-    // Disponent entry point - Dienstplanung (Disponent-Ansicht)
+    // Disponent entry point - Dienstplanung (Disponent-Ansicht Card-basiert)
     disponent: () => import('./disponent'),
+
+    // Disponent Table entry point - Dienstplanung (Disponent-Ansicht Tabelle)
+    disponentTable: () => import('./disponent-table'),
 };

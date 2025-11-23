@@ -18,8 +18,14 @@
     {
       "id": "main",
       "entryPoint": "disponent",
-      "title": "Dienstplanung Disponent",
-      "description": "Zentrale Ansicht für Disponenten zur Zuweisung von Mitarbeitern"
+      "title": "Dienstplanung Disponent (Cards)",
+      "description": "Card-basierte Ansicht für Disponenten zur Zuweisung von Mitarbeitern"
+    },
+    {
+      "id": "main",
+      "entryPoint": "disponentTable",
+      "title": "Dienstplanung Disponent (Tabelle)",
+      "description": "Tabellen-basierte Ansicht für Disponenten mit aggregierten Diensten"
     },
     {
       "id": "admin",
