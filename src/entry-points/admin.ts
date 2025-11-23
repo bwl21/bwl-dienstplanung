@@ -75,8 +75,8 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
     // Load service categories from ChurchTools API
     async function loadServiceCategories() {
         try {
-            const response = await churchtoolsClient.get('/api/event/servicegroups');
-            serviceCategories = response.data || [];
+            const response = await churchtoolsClient.get('/api/event/masterdata');
+            serviceCategories = response.data?.serviceGroups || [];
             console.log('[Admin] Service categories loaded:', serviceCategories);
         } catch (error) {
             console.error('[Admin] Failed to load service categories:', error);
