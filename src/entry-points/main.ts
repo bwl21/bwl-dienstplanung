@@ -82,6 +82,13 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
                 loadAvailabilities()
             ]);
 
+            console.log('[Dienstplanung] Loaded data:', {
+                events: events.length,
+                services: services.length,
+                serviceCategoryId,
+                eventsWithServices: events.filter(e => (e.eventServices || []).length > 0).length
+            });
+
             isLoading = false;
             errorMessage = '';
             render();
@@ -293,9 +300,30 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
             `;
         }
 
+        // Filter events that have requested services in the configured category
+        const eventsWithServices = events.filter(event => {
+            const requestedServices = (event.eventServices || [])
+                .filter(es => {
+                    const service = services.find(s => s.id === es.serviceId);
+                    return service && service.serviceGroupId.toString() === serviceCategoryId;
+                });
+            return requestedServices.length > 0;
+        });
+
+        if (eventsWithServices.length === 0) {
+            return `
+                <div style="padding: 2rem; text-align: center; color: #666; background: #f8f9fa; border-radius: 8px;">
+                    <p>Keine Events mit angeforderten Diensten in der ausgewählten Kategorie gefunden.</p>
+                    <p style="margin-top: 0.5rem; font-size: 0.9rem; color: #999;">
+                        Tipp: Prüfen Sie, ob Events Dienste aus der Kategorie "${services[0]?.name || 'ausgewählt'}" anfordern.
+                    </p>
+                </div>
+            `;
+        }
+
         return `
             <div style="display: flex; flex-direction: column; gap: 1.5rem;">
-                ${events.map(event => renderEvent(event)).join('')}
+                ${eventsWithServices.map(event => renderEvent(event)).join('')}
             </div>
         `;
     }

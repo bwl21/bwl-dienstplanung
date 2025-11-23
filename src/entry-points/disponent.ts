@@ -19,6 +19,15 @@ interface Event {
     name: string;
     startDate: string;
     endDate?: string;
+    eventServices?: EventService[];
+    [key: string]: any;
+}
+
+interface EventService {
+    id: number;
+    serviceId: number;
+    personId: number | null;
+    isAccepted: boolean;
     [key: string]: any;
 }
 
@@ -140,7 +149,7 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
         }
     }
 
-    // Load upcoming events
+    // Load upcoming events with their requested services
     async function loadEvents(): Promise<void> {
         try {
             const today = new Date().toISOString().split('T')[0];
@@ -149,7 +158,21 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
             const end = endDate.toISOString().split('T')[0];
             
             const response = await churchtoolsClient.get(`/events?from=${today}&to=${end}&limit=100`);
-            events = response.data || [];
+            const eventList = response.data || [];
+            
+            // Load detailed event data including eventServices
+            events = await Promise.all(
+                eventList.map(async (event: Event) => {
+                    try {
+                        const detailResponse = await churchtoolsClient.get(`/events/${event.id}`);
+                        return detailResponse.data || event;
+                    } catch (error) {
+                        console.warn(`[Disponent] Failed to load details for event ${event.id}:`, error);
+                        return event;
+                    }
+                })
+            );
+            
             console.log('[Disponent] Loaded events:', events.length);
         } catch (error) {
             console.error('[Disponent] Failed to load events:', error);
