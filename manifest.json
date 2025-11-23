@@ -16,6 +16,12 @@
       "description": "Event-Übersicht mit Diensten und Verfügbarkeitsmeldung"
     },
     {
+      "id": "main",
+      "entryPoint": "disponent",
+      "title": "Dienstplanung Disponent",
+      "description": "Zentrale Ansicht für Disponenten zur Zuweisung von Mitarbeitern"
+    },
+    {
       "id": "admin",
       "entryPoint": "admin",
       "title": "Dienstplanung Einstellungen",

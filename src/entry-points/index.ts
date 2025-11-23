@@ -31,6 +31,9 @@ export const entryPointRegistry: Record<string, EntryPointLoader> = {
     // Admin configuration entry point
     admin: () => import('./admin'),
 
-    // Main module entry point - Dienstplanung
+    // Main module entry point - Dienstplanung (Mitarbeiter-Ansicht)
     main: () => import('./main'),
+
+    // Disponent entry point - Dienstplanung (Disponent-Ansicht)
+    disponent: () => import('./disponent'),
 };

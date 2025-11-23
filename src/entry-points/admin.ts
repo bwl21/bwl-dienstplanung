@@ -237,9 +237,21 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
 
                     <!-- Info Box -->
                     <div style="margin-top: 1.5rem; padding: 1rem; background: #f8f9fa; border-left: 4px solid #007bff; border-radius: 4px;">
-                        <p style="margin: 0; font-size: 0.9rem; color: #666;">
+                        <p style="margin: 0 0 0.5rem 0; font-size: 0.9rem; color: #666;">
                             <strong>Hinweis:</strong> Die Einstellungen werden im ChurchTools Key-Value Store gespeichert.
                             ${import.meta.env.MODE === 'development' ? 'Entwicklungsmodus aktiv.' : ''}
+                        </p>
+                    </div>
+
+                    <!-- Berechtigungen Info -->
+                    <div style="margin-top: 1.5rem; padding: 1rem; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
+                        <h3 style="margin: 0 0 0.5rem 0; font-size: 1rem; color: #856404;">Berechtigungen</h3>
+                        <p style="margin: 0 0 0.5rem 0; font-size: 0.9rem; color: #856404;">
+                            <strong>Mitarbeiter:</strong> Können ihre Verfügbarkeit in der "Dienstplanung" Ansicht melden.
+                        </p>
+                        <p style="margin: 0; font-size: 0.9rem; color: #856404;">
+                            <strong>Disponenten:</strong> Haben zusätzlich Zugriff auf die "Dienstplanung Disponent" Ansicht zur Zuweisung von Mitarbeitern.
+                            Berechtigungen werden über ChurchTools-Gruppen und Rollen gesteuert.
                         </p>
                     </div>
                 `
