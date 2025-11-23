@@ -111,6 +111,14 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
                 loadPersons()
             ]);
 
+            console.log('[Disponent] Loaded data:', {
+                events: events.length,
+                services: services.length,
+                serviceCategoryId,
+                eventsWithServices: events.filter(e => (e.eventServices || []).length > 0).length,
+                persons: persons.size
+            });
+
             isLoading = false;
             errorMessage = '';
             render();
@@ -157,22 +165,10 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
             endDate.setDate(endDate.getDate() + dateRange);
             const end = endDate.toISOString().split('T')[0];
             
-            const response = await churchtoolsClient.get(`/events?from=${today}&to=${end}&limit=100`);
-            const eventList = response.data || [];
-            
-            // Load detailed event data including eventServices
-            events = await Promise.all(
-                eventList.map(async (event: Event) => {
-                    try {
-                        const detailResponse = await churchtoolsClient.get(`/events/${event.id}`);
-                        return detailResponse.data || event;
-                    } catch (error) {
-                        console.warn(`[Disponent] Failed to load details for event ${event.id}:`, error);
-                        return event;
-                    }
-                })
-            );
-            
+            console.log('[Disponent] Loading events from', today, 'to', end);
+            const response = await churchtoolsClient.get(`/events?from=${today}&to=${end}&limit=100&include=eventServices`);
+            console.log('[Disponent] Events response:', response);
+            events = response.data || response || [];
             console.log('[Disponent] Loaded events:', events.length);
         } catch (error) {
             console.error('[Disponent] Failed to load events:', error);
@@ -183,8 +179,10 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
     // Load services for the configured category
     async function loadServices(): Promise<void> {
         try {
+            console.log('[Disponent] Loading services for category:', serviceCategoryId);
             const response = await churchtoolsClient.get(`/services?servicegroup_id=${serviceCategoryId}`);
-            services = response.data || [];
+            console.log('[Disponent] Services response:', response);
+            services = response.data || response || [];
             console.log('[Disponent] Loaded services:', services.length);
         } catch (error) {
             console.error('[Disponent] Failed to load services:', error);
@@ -404,10 +402,38 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
             `;
         }
 
+        // Filter events that have requested services in the configured category
+        const eventsWithServices = events.filter(event => {
+            const requestedServices = (event.eventServices || [])
+                .filter(es => {
+                    const service = services.find(s => s.id === es.serviceId);
+                    return service && service.serviceGroupId.toString() === serviceCategoryId;
+                });
+            
+            // Apply service filter if selected
+            if (selectedServiceId) {
+                return requestedServices.some(es => es.serviceId === selectedServiceId);
+            }
+            
+            return requestedServices.length > 0;
+        });
+
+        if (eventsWithServices.length === 0) {
+            return `
+                ${renderFilters()}
+                <div style="padding: 2rem; text-align: center; color: #666; background: #f8f9fa; border-radius: 8px; margin-top: 1.5rem;">
+                    <p>Keine Events mit angeforderten Diensten in der ausgewählten Kategorie gefunden.</p>
+                    <p style="margin-top: 0.5rem; font-size: 0.9rem; color: #999;">
+                        Tipp: Prüfen Sie, ob Events Dienste aus der ausgewählten Kategorie anfordern.
+                    </p>
+                </div>
+            `;
+        }
+
         return `
             ${renderFilters()}
             <div style="display: flex; flex-direction: column; gap: 1.5rem; margin-top: 1.5rem;">
-                ${events.map(event => renderEvent(event)).join('')}
+                ${eventsWithServices.map(event => renderEvent(event)).join('')}
             </div>
         `;
     }
@@ -435,9 +461,19 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
     }
 
     function renderEvent(event: Event) {
+        // Get requested services for this event (only services in the configured category)
+        const requestedServices = (event.eventServices || [])
+            .filter(es => {
+                const service = services.find(s => s.id === es.serviceId);
+                return service && service.serviceGroupId.toString() === serviceCategoryId;
+            })
+            .map(es => services.find(s => s.id === es.serviceId))
+            .filter(s => s !== undefined);
+
+        // Apply service filter if selected
         const filteredServices = selectedServiceId 
-            ? services.filter(s => s.id === selectedServiceId)
-            : services;
+            ? requestedServices.filter(s => s!.id === selectedServiceId)
+            : requestedServices;
 
         if (filteredServices.length === 0) return '';
 
@@ -451,7 +487,7 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
                 </div>
 
                 <div style="display: flex; flex-direction: column; gap: 1rem;">
-                    ${filteredServices.map(service => renderServiceAssignment(event, service)).join('')}
+                    ${filteredServices.map(service => renderServiceAssignment(event, service!)).join('')}
                 </div>
             </div>
         `;

@@ -131,22 +131,10 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
     async function loadEvents(): Promise<void> {
         try {
             const today = new Date().toISOString().split('T')[0];
-            const response = await churchtoolsClient.get(`/events?from=${today}&limit=50`);
-            const eventList = response.data || [];
-            
-            // Load detailed event data including eventServices
-            events = await Promise.all(
-                eventList.map(async (event: Event) => {
-                    try {
-                        const detailResponse = await churchtoolsClient.get(`/events/${event.id}`);
-                        return detailResponse.data || event;
-                    } catch (error) {
-                        console.warn(`[Dienstplanung] Failed to load details for event ${event.id}:`, error);
-                        return event;
-                    }
-                })
-            );
-            
+            console.log('[Dienstplanung] Loading events from', today);
+            const response = await churchtoolsClient.get(`/events?from=${today}&limit=50&include=eventServices`);
+            console.log('[Dienstplanung] Events response:', response);
+            events = response.data || response || [];
             console.log('[Dienstplanung] Loaded events:', events.length);
         } catch (error) {
             console.error('[Dienstplanung] Failed to load events:', error);
@@ -157,8 +145,10 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
     // Load services for the configured category
     async function loadServices(): Promise<void> {
         try {
+            console.log('[Dienstplanung] Loading services for category:', serviceCategoryId);
             const response = await churchtoolsClient.get(`/services?servicegroup_id=${serviceCategoryId}`);
-            services = response.data || [];
+            console.log('[Dienstplanung] Services response:', response);
+            services = response.data || response || [];
             console.log('[Dienstplanung] Loaded services:', services.length);
         } catch (error) {
             console.error('[Dienstplanung] Failed to load services:', error);
