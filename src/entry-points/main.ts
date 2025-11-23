@@ -19,6 +19,15 @@ interface Event {
     name: string;
     startDate: string;
     endDate?: string;
+    eventServices?: EventService[];
+    [key: string]: any;
+}
+
+interface EventService {
+    id: number;
+    serviceId: number;
+    personId: number | null;
+    isAccepted: boolean;
     [key: string]: any;
 }
 
@@ -111,12 +120,26 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
         }
     }
 
-    // Load upcoming events
+    // Load upcoming events with their requested services
     async function loadEvents(): Promise<void> {
         try {
             const today = new Date().toISOString().split('T')[0];
             const response = await churchtoolsClient.get(`/events?from=${today}&limit=50`);
-            events = response.data || [];
+            const eventList = response.data || [];
+            
+            // Load detailed event data including eventServices
+            events = await Promise.all(
+                eventList.map(async (event: Event) => {
+                    try {
+                        const detailResponse = await churchtoolsClient.get(`/events/${event.id}`);
+                        return detailResponse.data || event;
+                    } catch (error) {
+                        console.warn(`[Dienstplanung] Failed to load details for event ${event.id}:`, error);
+                        return event;
+                    }
+                })
+            );
+            
             console.log('[Dienstplanung] Loaded events:', events.length);
         } catch (error) {
             console.error('[Dienstplanung] Failed to load events:', error);
@@ -278,6 +301,22 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
     }
 
     function renderEvent(event: Event) {
+        // Get requested services for this event (only services in the configured category)
+        const requestedServices = (event.eventServices || [])
+            .filter(es => {
+                const service = services.find(s => s.id === es.serviceId);
+                return service && service.serviceGroupId.toString() === serviceCategoryId;
+            })
+            .map(es => {
+                const service = services.find(s => s.id === es.serviceId);
+                return { eventService: es, service };
+            })
+            .filter(item => item.service);
+
+        if (requestedServices.length === 0) {
+            return ''; // Don't show events without requested services in this category
+        }
+
         return `
             <div style="background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem;">
                 <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
@@ -289,23 +328,23 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
                     </div>
                 </div>
 
-                ${services.length === 0 ? `
-                    <p style="color: #999; font-style: italic;">Keine Dienste in dieser Kategorie gefunden.</p>
-                ` : `
-                    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                        ${services.map(service => renderService(event, service)).join('')}
-                    </div>
-                `}
+                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                    ${requestedServices.map(item => renderService(event, item.service!, item.eventService)).join('')}
+                </div>
             </div>
         `;
     }
 
-    function renderService(event: Event, service: Service) {
+    function renderService(event: Event, service: Service, eventService: EventService) {
         const availability = getAvailability(event.id, service.id);
+        const isAssigned = eventService.personId !== null;
         
         return `
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #f8f9fa; border-radius: 4px;">
-                <span style="font-weight: 500;">${service.name}</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: ${isAssigned ? '#e3f2fd' : '#f8f9fa'}; border-radius: 4px; ${isAssigned ? 'border-left: 4px solid #2196f3;' : ''}">
+                <div>
+                    <span style="font-weight: 500;">${service.name}</span>
+                    ${isAssigned ? `<span style="margin-left: 0.5rem; color: #2196f3; font-size: 0.9rem;">🔵 Bereits zugeteilt</span>` : ''}
+                </div>
                 <div style="display: flex; gap: 0.5rem;">
                     <button
                         class="availability-btn"
