@@ -1,34 +1,69 @@
-// For format details, see https://aka.ms/devcontainer.json. For config options, see the
-// README at: https://github.com/devcontainers/templates/tree/main/src/typescript-node
+
+// Optimized Dev Container for Vue.js/TypeScript development
+// Uses Node.js-specific image for faster startup and smaller size
 {
-	"name": "Node.js & TypeScript",
-	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-	"image": "mcr.microsoft.com/devcontainers/typescript-node:1-22-bookworm",
-
-	// Features to add to the dev container. More info: https://containers.dev/features.
-	// "features": {},
-
-	// Use 'forwardPorts' to make a list of ports inside the container available locally.
-	// "forwardPorts": [],
-
-	// Use 'postCreateCommand' to run commands after the container is created.
-	"postCreateCommand": "npm install",
-
+	"name": "Vue.js JsonLogic Editor",
+	// Node.js 22 image (~2-3GB) optimized for JavaScript/TypeScript development
+	// Much faster startup than universal image (~10GB)
+	"image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+	
+	// Additional development tools
+	"features": {
+		"ghcr.io/devcontainers/features/github-cli:1": {},
+		"ghcr.io/devcontainers/features/git-lfs:1": {}
+	},
+	
 	// Configure tool-specific properties.
-	// Uncomment to install VS Code extensions for vue, tailwind and prettier.
-	// "customizations": {
-	// 	"vscode": {
-	// 		"extensions": [
-	// 			"Vue.volar",
-	// 			"bradlc.vscode-tailwindcss",
-	// 			"esbenp.prettier-vscode"
-	// 		]
-	// 	}
-	// },
-
-	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
-	// "remoteUser": "root"
-
-	// Disable IPv6 to avoid issues with vite dev, see https://github.com/vitejs/vite/issues/16522#issuecomment-2084322973
-	"runArgs": [ "--sysctl", "net.ipv6.conf.all.disable_ipv6=1"]
+	"customizations": {
+		// Configure properties specific to VS Code.
+		"vscode": {
+			"extensions": [
+				"Vue.volar",
+				"Vue.vscode-typescript-vue-plugin",
+				"bradlc.vscode-tailwindcss",
+				"esbenp.prettier-vscode",
+				"dbaeumer.vscode-eslint",
+				"ms-vscode.vscode-typescript-next",
+				"mhutchie.git-graph",
+				"EditorConfig.EditorConfig",
+				"ms-playwright.playwright"
+			],
+			"settings": {
+				"editor.formatOnSave": true,
+				"editor.defaultFormatter": "esbenp.prettier-vscode",
+				"editor.codeActionsOnSave": {
+					"source.fixAll": "explicit",
+					"source.fixAll.eslint": "explicit",
+					"source.organizeImports": "explicit"
+				},
+				// TypeScript - Use workspace version
+				"typescript.tsdk": "node_modules/typescript/lib",
+				"typescript.enablePromptUseWorkspaceTsdk": true,
+				"typescript.preferences.importModuleSpecifier": "relative",
+				// Vue/Volar
+				"vue.codeActions.enabled": true,
+				"volar.takeOverMode.enabled": true,
+				// File associations
+				"files.associations": {
+					"*.vue": "vue"
+				},
+				// Formatters per language
+				"[vue]": {
+					"editor.defaultFormatter": "esbenp.prettier-vscode"
+				},
+				"[typescript]": {
+					"editor.defaultFormatter": "esbenp.prettier-vscode"
+				},
+				"[javascript]": {
+					"editor.defaultFormatter": "esbenp.prettier-vscode"
+				}
+			}
+		}
+	},
+	
+	// Forward Vite development server port
+	"forwardPorts": [5173],
+	
+	// Automatically install dependencies and setup git hooks after container creation
+	"postCreateCommand": "npm install && ./scripts/setup-hooks.sh"
 }
