@@ -86,6 +86,7 @@ interface Person {
 const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient, KEY, user }) => {
     console.log('[Disponent-Table] Initializing');
 
+    let scenarios: ScenarioConfig[] = [];
     let currentScenario: ScenarioConfig | null = null;
     let serviceCategoryId: string | null = null;
     let events: Event[] = [];
@@ -164,11 +165,12 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
             moduleId = extensionModule.id;
 
             // Load scenarios
-            const scenarios = await loadScenarios();
+            scenarios = await loadScenarios();
             
             if (scenarios.length > 0) {
-                // Use first scenario for now (later: add scenario selector)
-                currentScenario = scenarios[0];
+                // Try to load saved scenario from localStorage
+                const savedScenarioId = localStorage.getItem('bwl-dienstplanung-scenario');
+                currentScenario = scenarios.find(s => s.id === savedScenarioId) || scenarios[0];
                 console.log('[Disponent-Table] Using scenario:', currentScenario.name);
             } else {
                 // Fallback to old settings
@@ -188,6 +190,31 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
         } catch (error) {
             console.log('[Disponent-Table] Could not load settings:', error);
         }
+    }
+    
+    async function switchScenario(scenarioId: string) {
+        const newScenario = scenarios.find(s => s.id === scenarioId);
+        if (!newScenario) return;
+        
+        currentScenario = newScenario;
+        localStorage.setItem('bwl-dienstplanung-scenario', scenarioId);
+        console.log('[Disponent-Table] Switched to scenario:', currentScenario.name);
+        
+        // Reload data
+        isLoading = true;
+        render();
+        
+        await Promise.all([
+            loadEvents(),
+            loadServices(),
+            loadAvailabilities(),
+            loadAssignments()
+        ]);
+        
+        await loadPersons();
+        
+        isLoading = false;
+        render();
     }
 
     async function loadEvents(): Promise<void> {
@@ -443,6 +470,7 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
     function render() {
         element.innerHTML = `
             <div style="padding: 2rem; max-width: 1600px; margin: 0 auto;">
+                ${renderScenarioSelector()}
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
                     <h1 style="margin: 0; font-size: 1.8rem;">Dienstplanung – Veranstaltungen</h1>
                     ${renderFilters()}
@@ -461,6 +489,35 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
         if (!isLoading && !errorMessage) {
             attachEventHandlers();
         }
+    }
+
+    function renderScenarioSelector() {
+        if (scenarios.length === 0) return '';
+        
+        return `
+            <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 1rem; margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">
+                    Planungsszenario:
+                </label>
+                <select 
+                    id="scenario-selector" 
+                    style="width: 100%; max-width: 400px; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
+                >
+                    ${scenarios.map(scenario => `
+                        <option value="${scenario.id}" ${currentScenario?.id === scenario.id ? 'selected' : ''}>
+                            ${scenario.name} - ${scenario.description}
+                        </option>
+                    `).join('')}
+                </select>
+                ${currentScenario ? `
+                    <div style="margin-top: 0.5rem; font-size: 0.85rem; color: #666;">
+                        Kalender: ${currentScenario.calendarIds.length || 'Alle'} | 
+                        Kategorien: ${currentScenario.serviceCategoryIds.length || 'Alle'} | 
+                        Gruppen: ${currentScenario.serviceGroupIds.length || 'Alle'}
+                    </div>
+                ` : ''}
+            </div>
+        `;
     }
 
     function renderFilters() {
@@ -626,6 +683,15 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
     }
 
     function attachEventHandlers() {
+        // Scenario selector
+        const scenarioSelector = element.querySelector('#scenario-selector') as HTMLSelectElement;
+        if (scenarioSelector) {
+            scenarioSelector.addEventListener('change', (e) => {
+                const selectedId = (e.target as HTMLSelectElement).value;
+                switchScenario(selectedId);
+            });
+        }
+        
         // Remove assignment buttons
         const removeButtons = element.querySelectorAll('.remove-assignment');
         removeButtons.forEach(btn => {

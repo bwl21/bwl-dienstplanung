@@ -32,7 +32,7 @@ export const entryPointRegistry: Record<string, EntryPointLoader> = {
     admin: () => import('./admin'),
 
     // Main module entry point - Dienstplanung (Mitarbeiter-Ansicht)
-    main: () => import('./main'),
+    main: () => import('./mitarbeiter'),
 
     // Disponent entry point - Dienstplanung (Disponent-Ansicht Card-basiert)
     disponent: () => import('./disponent'),

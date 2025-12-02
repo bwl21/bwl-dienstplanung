@@ -50,6 +50,9 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
     let calendars: any[] = [];
     let services: any[] = [];
     let currentView: 'legacy' | 'scenarios' = 'scenarios';
+    let showModal = false;
+    let editingScenario: ScenarioConfig | null = null;
+    let scenarioFilter = '';
 
     // UI State
     let isLoading = true;
@@ -228,60 +231,132 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
 
     // Render UI
     function renderScenariosView(): string {
+        const filteredScenarios = scenarios.filter(s => 
+            scenarioFilter === '' || 
+            s.name.toLowerCase().includes(scenarioFilter.toLowerCase()) ||
+            s.description.toLowerCase().includes(scenarioFilter.toLowerCase()) ||
+            s.id.toLowerCase().includes(scenarioFilter.toLowerCase())
+        );
+        
         return `
-            <h2 style="margin: 0 0 1rem 0; font-size: 1.1rem;">Planungsszenarien</h2>
-            <p style="margin: 0 0 1rem 0; color: #666; font-size: 0.9rem;">
-                Verwalten Sie verschiedene Planungsszenarien mit eigenen Filtern und Berechtigungen.
-            </p>
-            
-            <!-- Existing Scenarios -->
-            ${scenarios.length > 0 ? `
-                <div style="margin-bottom: 1.5rem;">
-                    <h3 style="margin: 0 0 0.5rem 0; font-size: 1rem;">Vorhandene Szenarien</h3>
-                    ${scenarios.map((scenario, index) => `
-                        <div style="border: 1px solid #ddd; border-radius: 4px; padding: 1rem; margin-bottom: 1rem; background: #f9f9f9;">
-                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
-                                <div>
-                                    <h4 style="margin: 0 0 0.25rem 0; font-size: 1rem;">${scenario.name}</h4>
-                                    <p style="margin: 0; color: #666; font-size: 0.9rem;">${scenario.description}</p>
-                                </div>
-                                <button 
-                                    class="delete-scenario-btn" 
-                                    data-index="${index}"
-                                    style="padding: 0.25rem 0.5rem; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;"
-                                >
-                                    Löschen
-                                </button>
-                            </div>
-                            
-                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; font-size: 0.85rem; color: #666; margin-top: 0.5rem;">
-                                <div>
-                                    <strong>Kalender:</strong> ${scenario.calendarIds.length > 0 ? scenario.calendarIds.map(id => {
-                                        const cal = calendars.find(c => c.id === id);
-                                        return cal ? cal.name : id;
-                                    }).join(', ') : 'Alle'}
-                                </div>
-                                <div>
-                                    <strong>Kategorien:</strong> ${scenario.serviceCategoryIds.length > 0 ? scenario.serviceCategoryIds.map(id => {
-                                        const cat = serviceCategories.find(c => c.id === id);
-                                        return cat ? (cat.name || cat.bezeichnung) : id;
-                                    }).join(', ') : 'Alle'}
-                                </div>
-                                <div>
-                                    <strong>Gruppen:</strong> ${scenario.serviceGroupIds.length > 0 ? scenario.serviceGroupIds.join(', ') : 'Alle'}
-                                </div>
-                                <div>
-                                    <strong>Disponenten:</strong> ${scenario.disponentPermissions.length} User
-                                </div>
-                            </div>
-                        </div>
-                    `).join('')}
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <div>
+                    <h2 style="margin: 0 0 0.25rem 0; font-size: 1.1rem;">Planungsszenarien</h2>
+                    <p style="margin: 0; color: #666; font-size: 0.9rem;">
+                        Verwalten Sie verschiedene Planungsszenarien mit eigenen Filtern und Berechtigungen.
+                    </p>
                 </div>
-            ` : ''}
+                <button 
+                    id="new-scenario-btn"
+                    style="padding: 0.75rem 1.5rem; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; font-size: 1rem;"
+                >
+                    + Neues Szenario
+                </button>
+            </div>
             
-            <!-- New Scenario Form -->
-            <div style="border: 1px solid #ddd; border-radius: 4px; padding: 1.5rem; background: #fff;">
-                <h3 style="margin: 0 0 1rem 0; font-size: 1rem;">Neues Szenario erstellen</h3>
+            ${scenarios.length > 0 ? `
+                <!-- Filter -->
+                <div style="margin-bottom: 1rem;">
+                    <input 
+                        type="text" 
+                        id="scenario-filter" 
+                        placeholder="Szenarien filtern..."
+                        value="${scenarioFilter}"
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
+                    />
+                </div>
+                
+                <!-- Scenarios Table -->
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; background: white; border: 1px solid #ddd;">
+                        <thead>
+                            <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                                <th style="padding: 0.75rem; text-align: left; font-weight: 600;">ID</th>
+                                <th style="padding: 0.75rem; text-align: left; font-weight: 600;">Name</th>
+                                <th style="padding: 0.75rem; text-align: left; font-weight: 600;">Beschreibung</th>
+                                <th style="padding: 0.75rem; text-align: center; font-weight: 600;">Kalender</th>
+                                <th style="padding: 0.75rem; text-align: center; font-weight: 600;">Kategorien</th>
+                                <th style="padding: 0.75rem; text-align: center; font-weight: 600;">Gruppen</th>
+                                <th style="padding: 0.75rem; text-align: center; font-weight: 600;">Disponenten</th>
+                                <th style="padding: 0.75rem; text-align: center; font-weight: 600;">Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filteredScenarios.map((scenario, index) => `
+                                <tr style="border-bottom: 1px solid #dee2e6;">
+                                    <td style="padding: 0.75rem; font-family: monospace; font-size: 0.9rem;">${scenario.id}</td>
+                                    <td style="padding: 0.75rem; font-weight: 500;">${scenario.name}</td>
+                                    <td style="padding: 0.75rem; color: #666;">${scenario.description}</td>
+                                    <td style="padding: 0.75rem; text-align: center;">${scenario.calendarIds.length || '-'}</td>
+                                    <td style="padding: 0.75rem; text-align: center;">${scenario.serviceCategoryIds.length || '-'}</td>
+                                    <td style="padding: 0.75rem; text-align: center;">${scenario.serviceGroupIds.length || '-'}</td>
+                                    <td style="padding: 0.75rem; text-align: center;">${scenario.disponentPermissions.length}</td>
+                                    <td style="padding: 0.75rem; text-align: center;">
+                                        <button 
+                                            class="edit-scenario-btn" 
+                                            data-index="${scenarios.indexOf(scenario)}"
+                                            style="padding: 0.25rem 0.75rem; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 0.5rem;"
+                                        >
+                                            Bearbeiten
+                                        </button>
+                                        <button 
+                                            class="delete-scenario-btn" 
+                                            data-index="${scenarios.indexOf(scenario)}"
+                                            style="padding: 0.25rem 0.75rem; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;"
+                                        >
+                                            Löschen
+                                        </button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            ` : `
+                <div style="padding: 3rem; text-align: center; background: #f9f9f9; border-radius: 8px; border: 2px dashed #ddd;">
+                    <p style="margin: 0 0 1rem 0; color: #666; font-size: 1.1rem;">Noch keine Szenarien vorhanden</p>
+                    <p style="margin: 0; color: #999; font-size: 0.9rem;">Klicken Sie auf "Neues Szenario" um zu beginnen</p>
+                </div>
+            `}
+            
+            ${showModal ? renderScenarioModal() : ''}
+        `;
+    }
+    
+    function renderScenarioModal(): string {
+        const isEdit = editingScenario !== null;
+        const scenario = editingScenario || {
+            id: '',
+            name: '',
+            description: '',
+            calendarIds: [] as number[],
+            serviceCategoryIds: [] as number[],
+            serviceGroupIds: [] as number[],
+            disponentPermissions: [] as number[],
+            mitarbeiterPermissions: [] as number[]
+        };
+        
+        return `
+            <!-- Modal Overlay -->
+            <div id="scenario-modal-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center;">
+                <div style="background: white; border-radius: 8px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                    <div style="padding: 1.5rem; border-bottom: 1px solid #dee2e6; display: flex; justify-content: space-between; align-items: center;">
+                        <h3 style="margin: 0; font-size: 1.2rem;">${isEdit ? 'Szenario bearbeiten' : 'Neues Szenario erstellen'}</h3>
+                        <button id="close-modal-btn" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #666;">&times;</button>
+                    </div>
+                    
+                    <div style="padding: 1.5rem;">
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">ID (eindeutig, z.B. "service"):</label>
+                            <input 
+                                type="text" 
+                                id="scenario-id" 
+                                value="${scenario.id}"
+                                ${isEdit ? 'disabled' : ''}
+                                placeholder="service"
+                                style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; ${isEdit ? 'background: #f5f5f5;' : ''}"
+                            />
+                        </div>
                 
                 <div style="margin-bottom: 1rem;">
                     <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">ID (eindeutig, z.B. "service"):</label>
@@ -292,103 +367,118 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
                         style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
                     />
                 </div>
-                
-                <div style="margin-bottom: 1rem;">
-                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Name:</label>
-                    <input 
-                        type="text" 
-                        id="scenario-name" 
-                        placeholder="Service"
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
-                    />
+                        
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Name:</label>
+                            <input 
+                                type="text" 
+                                id="scenario-name" 
+                                value="${scenario.name}"
+                                placeholder="Service"
+                                style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+                            />
+                        </div>
+                        
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Beschreibung:</label>
+                            <input 
+                                type="text" 
+                                id="scenario-description" 
+                                value="${scenario.description}"
+                                placeholder="Gottesdienst-Planung"
+                                style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+                            />
+                        </div>
+                        
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Kalender (mehrere möglich):</label>
+                            <select 
+                                id="scenario-calendars" 
+                                multiple 
+                                size="5"
+                                style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+                            >
+                                ${calendars.map(cal => `
+                                    <option value="${cal.id}" ${scenario.calendarIds.includes(cal.id) ? 'selected' : ''}>${cal.name || cal.title}</option>
+                                `).join('')}
+                            </select>
+                            <small style="color: #666;">Strg/Cmd + Klick für Mehrfachauswahl</small>
+                        </div>
+                        
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Dienstkategorien (mehrere möglich):</label>
+                            <select 
+                                id="scenario-categories" 
+                                multiple 
+                                size="5"
+                                style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+                            >
+                                ${serviceCategories.map(cat => `
+                                    <option value="${cat.id}" ${scenario.serviceCategoryIds.includes(cat.id) ? 'selected' : ''}>${cat.name || cat.bezeichnung}</option>
+                                `).join('')}
+                            </select>
+                            <small style="color: #666;">Strg/Cmd + Klick für Mehrfachauswahl</small>
+                        </div>
+                        
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Besetzergruppen-IDs (kommagetrennt, optional):</label>
+                            <input 
+                                type="text" 
+                                id="scenario-groups" 
+                                value="${scenario.serviceGroupIds.join(', ')}"
+                                placeholder="20, 21, 22"
+                                style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+                            />
+                            <small style="color: #666;">Leer lassen für alle Gruppen der ausgewählten Kategorien</small>
+                        </div>
+                        
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Disponent User-IDs (kommagetrennt):</label>
+                            <input 
+                                type="text" 
+                                id="scenario-disponent-users" 
+                                value="${scenario.disponentPermissions.join(', ')}"
+                                placeholder="1, 2, 3"
+                                style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+                            />
+                        </div>
+                        
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Mitarbeiter User-IDs (kommagetrennt):</label>
+                            <input 
+                                type="text" 
+                                id="scenario-mitarbeiter-users" 
+                                value="${scenario.mitarbeiterPermissions.join(', ')}"
+                                placeholder="1, 2, 3, 4, 5"
+                                style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+                            />
+                        </div>
+                        
+                        <div id="scenario-message" style="margin-bottom: 1rem; padding: 0.75rem; border-radius: 4px; display: none;"></div>
+                        
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button 
+                                id="save-scenario-btn"
+                                style="flex: 1; padding: 0.75rem; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
+                            >
+                                ${isEdit ? 'Änderungen speichern' : 'Szenario erstellen'}
+                            </button>
+                            <button 
+                                id="cancel-modal-btn"
+                                style="padding: 0.75rem 1.5rem; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
+                            >
+                                Abbrechen
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                
-                <div style="margin-bottom: 1rem;">
-                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Beschreibung:</label>
-                    <input 
-                        type="text" 
-                        id="scenario-description" 
-                        placeholder="Gottesdienst-Planung"
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
-                    />
-                </div>
-                
-                <div style="margin-bottom: 1rem;">
-                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Kalender (mehrere möglich):</label>
-                    <select 
-                        id="scenario-calendars" 
-                        multiple 
-                        size="5"
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
-                    >
-                        ${calendars.map(cal => `
-                            <option value="${cal.id}">${cal.name || cal.title}</option>
-                        `).join('')}
-                    </select>
-                    <small style="color: #666;">Strg/Cmd + Klick für Mehrfachauswahl</small>
-                </div>
-                
-                <div style="margin-bottom: 1rem;">
-                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Dienstkategorien (mehrere möglich):</label>
-                    <select 
-                        id="scenario-categories" 
-                        multiple 
-                        size="5"
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
-                    >
-                        ${serviceCategories.map(cat => `
-                            <option value="${cat.id}">${cat.name || cat.bezeichnung}</option>
-                        `).join('')}
-                    </select>
-                    <small style="color: #666;">Strg/Cmd + Klick für Mehrfachauswahl</small>
-                </div>
-                
-                <div style="margin-bottom: 1rem;">
-                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Besetzergruppen-IDs (kommagetrennt, optional):</label>
-                    <input 
-                        type="text" 
-                        id="scenario-groups" 
-                        placeholder="20, 21, 22"
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
-                    />
-                    <small style="color: #666;">Leer lassen für alle Gruppen der ausgewählten Kategorien</small>
-                </div>
-                
-                <div style="margin-bottom: 1rem;">
-                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Disponent User-IDs (kommagetrennt):</label>
-                    <input 
-                        type="text" 
-                        id="scenario-disponent-users" 
-                        placeholder="1, 2, 3"
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
-                    />
-                </div>
-                
-                <div style="margin-bottom: 1rem;">
-                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Mitarbeiter User-IDs (kommagetrennt):</label>
-                    <input 
-                        type="text" 
-                        id="scenario-mitarbeiter-users" 
-                        placeholder="1, 2, 3, 4, 5"
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
-                    />
-                </div>
-                
-                <button 
-                    id="create-scenario-btn"
-                    style="width: 100%; padding: 0.75rem; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
-                >
-                    Szenario erstellen
-                </button>
-                
-                <div id="scenario-message" style="margin-top: 1rem; padding: 0.75rem; border-radius: 4px; display: none;"></div>
             </div>
         `;
     }
 
     function render() {
         element.innerHTML = `
-            <div style="max-width: 800px; margin: 2rem auto; padding: 2rem;">
+            <div style="padding: 2rem; max-width: ${currentView === 'scenarios' ? '100%' : '800px'}; margin: 0 auto;">
                 <!-- Extension Info Header -->
                 <div style="background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem;">
                     <h1 style="margin: 0 0 0.5rem 0; font-size: 1.5rem;">${data.extensionInfo?.name || 'Extension Settings'}</h1>
@@ -510,7 +600,7 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
         }
     }
 
-    async function createScenario() {
+    async function saveScenario() {
         const scenarioId = (element.querySelector('#scenario-id') as HTMLInputElement)?.value.trim();
         const scenarioName = (element.querySelector('#scenario-name') as HTMLInputElement)?.value.trim();
         const scenarioDescription = (element.querySelector('#scenario-description') as HTMLInputElement)?.value.trim();
@@ -532,6 +622,8 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
         
         const messageDiv = element.querySelector('#scenario-message') as HTMLDivElement;
         
+        const isEdit = editingScenario !== null;
+        
         // Validation
         if (!scenarioId || !scenarioName) {
             messageDiv.style.display = 'block';
@@ -542,7 +634,7 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
             return;
         }
         
-        if (scenarios.some(s => s.id === scenarioId)) {
+        if (!isEdit && scenarios.some(s => s.id === scenarioId)) {
             messageDiv.style.display = 'block';
             messageDiv.style.background = '#fee';
             messageDiv.style.border = '1px solid #fcc';
@@ -579,36 +671,54 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
                 createdBy: 1 // TODO: Get from user context
             };
             
-            // Save scenario
-            await createCustomDataValue({
-                dataCategoryId: scenariosCategory.id,
-                value: JSON.stringify(scenarioConfig),
-            }, moduleId);
-            
-            // Create data categories for scenario
-            await createCustomDataCategory({
-                customModuleId: moduleId,
-                name: `${scenarioId} - Disponent Data`,
-                shorty: `${scenarioId}__disponent`,
-                description: `Disponent planning data for ${scenarioId}`,
-            }, moduleId);
-            
-            await createCustomDataCategory({
-                customModuleId: moduleId,
-                name: `${scenarioId} - Mitarbeiter Data`,
-                shorty: `${scenarioId}__mitarbeiter`,
-                description: `Mitarbeiter data for ${scenarioId}`,
-            }, moduleId);
+            if (isEdit) {
+                // Update existing scenario
+                const values = await getCustomDataValues<ScenarioConfig>(scenariosCategory.id, moduleId);
+                const existingValue = values.find(v => JSON.parse((v as any).value || '{}').id === scenarioId);
+                
+                if (existingValue && (existingValue as any).id) {
+                    // Update via API
+                    await churchtoolsClient.patch(
+                        `/modules/${moduleId}/data/categories/${scenariosCategory.id}/values/${(existingValue as any).id}`,
+                        { value: JSON.stringify(scenarioConfig) }
+                    );
+                }
+            } else {
+                // Create new scenario
+                await createCustomDataValue({
+                    dataCategoryId: scenariosCategory.id,
+                    value: JSON.stringify(scenarioConfig),
+                }, moduleId);
+                
+                // Create data categories for scenario
+                await createCustomDataCategory({
+                    customModuleId: moduleId,
+                    name: `${scenarioId} - Disponent Data`,
+                    shorty: `${scenarioId}__disponent`,
+                    description: `Disponent planning data for ${scenarioId}`,
+                }, moduleId);
+                
+                await createCustomDataCategory({
+                    customModuleId: moduleId,
+                    name: `${scenarioId} - Mitarbeiter Data`,
+                    shorty: `${scenarioId}__mitarbeiter`,
+                    description: `Mitarbeiter data for ${scenarioId}`,
+                }, moduleId);
+            }
             
             messageDiv.style.display = 'block';
             messageDiv.style.background = '#d4edda';
             messageDiv.style.border = '1px solid #c3e6cb';
             messageDiv.style.color = '#155724';
-            messageDiv.textContent = 'Szenario erfolgreich erstellt!';
+            messageDiv.textContent = isEdit ? 'Szenario erfolgreich aktualisiert!' : 'Szenario erfolgreich erstellt!';
             
-            // Reload scenarios and re-render
+            // Reload scenarios and close modal
             await loadScenarios();
-            setTimeout(() => render(), 1500);
+            setTimeout(() => {
+                showModal = false;
+                editingScenario = null;
+                render();
+            }, 1500);
             
         } catch (error) {
             console.error('[Admin] Failed to create scenario:', error);
@@ -674,10 +784,67 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
         }
         
         // Scenario management
-        const createScenarioBtn = element.querySelector('#create-scenario-btn');
-        if (createScenarioBtn) {
-            createScenarioBtn.addEventListener('click', createScenario);
+        const newScenarioBtn = element.querySelector('#new-scenario-btn');
+        if (newScenarioBtn) {
+            newScenarioBtn.addEventListener('click', () => {
+                editingScenario = null;
+                showModal = true;
+                render();
+            });
         }
+        
+        const saveScenarioBtn = element.querySelector('#save-scenario-btn');
+        if (saveScenarioBtn) {
+            saveScenarioBtn.addEventListener('click', saveScenario);
+        }
+        
+        const closeModalBtn = element.querySelector('#close-modal-btn');
+        const cancelModalBtn = element.querySelector('#cancel-modal-btn');
+        const modalOverlay = element.querySelector('#scenario-modal-overlay');
+        
+        if (closeModalBtn) {
+            closeModalBtn.addEventListener('click', () => {
+                showModal = false;
+                editingScenario = null;
+                render();
+            });
+        }
+        
+        if (cancelModalBtn) {
+            cancelModalBtn.addEventListener('click', () => {
+                showModal = false;
+                editingScenario = null;
+                render();
+            });
+        }
+        
+        if (modalOverlay) {
+            modalOverlay.addEventListener('click', (e) => {
+                if (e.target === modalOverlay) {
+                    showModal = false;
+                    editingScenario = null;
+                    render();
+                }
+            });
+        }
+        
+        const scenarioFilterInput = element.querySelector('#scenario-filter');
+        if (scenarioFilterInput) {
+            scenarioFilterInput.addEventListener('input', (e) => {
+                scenarioFilter = (e.target as HTMLInputElement).value;
+                render();
+            });
+        }
+        
+        const editButtons = element.querySelectorAll('.edit-scenario-btn');
+        editButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const index = Number((e.target as HTMLElement).dataset.index);
+                editingScenario = scenarios[index];
+                showModal = true;
+                render();
+            });
+        });
         
         const deleteButtons = element.querySelectorAll('.delete-scenario-btn');
         deleteButtons.forEach(btn => {
