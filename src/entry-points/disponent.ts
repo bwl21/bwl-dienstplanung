@@ -107,9 +107,10 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
                 loadEvents(),
                 loadServices(),
                 loadAvailabilities(),
-                loadAssignments(),
-                loadPersons()
+                loadAssignments()
             ]);
+            
+            await loadPersons();
 
             console.log('[Disponent] Loaded data:', {
                 events: events.length,
@@ -250,15 +251,69 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
     // Load persons
     async function loadPersons(): Promise<void> {
         try {
-            const response = await churchtoolsClient.get('/persons?limit=500');
-            const personList = response.data || [];
+            const personIds = new Set<number>();
+            
+            // Collect person IDs from event services (assigned persons)
+            events.forEach(event => {
+                (event.eventServices || []).forEach(es => {
+                    if (es.personId) {
+                        personIds.add(es.personId);
+                    }
+                });
+            });
+            
+            // Collect person IDs from availabilities
+            availabilities.forEach(avail => {
+                personIds.add(avail.userId);
+            });
+            
+            // Collect person IDs from assignments
+            assignments.forEach(assignment => {
+                personIds.add(assignment.userId);
+            });
+            
+            if (personIds.size === 0) {
+                console.log('[Disponent] No person IDs to load');
+                return;
+            }
             
             persons.clear();
-            personList.forEach((p: Person) => {
-                persons.set(p.id, p);
-            });
-
-            console.log('[Disponent] Loaded persons:', persons.size);
+            
+            const idsArray = Array.from(personIds);
+            console.log(`[Disponent] Loading ${idsArray.length} persons with ids[] parameter`);
+            
+            // Build URL with ids[] parameter - load in batches to avoid URL length limits
+            const batchSize = 100;
+            for (let i = 0; i < idsArray.length; i += batchSize) {
+                const batch = idsArray.slice(i, i + batchSize);
+                
+                const params = new URLSearchParams();
+                batch.forEach(id => {
+                    params.append('ids[]', id.toString());
+                });
+                params.append('limit', batch.length.toString());
+                
+                const url = `/persons?${params.toString()}`;
+                
+                try {
+                    const response = await churchtoolsClient.get(url);
+                    const personList = response.data || response || [];
+                    
+                    personList.forEach((p: Person) => {
+                        persons.set(p.id, p);
+                    });
+                    
+                    console.log(`[Disponent] Batch ${Math.floor(i/batchSize)+1}: loaded ${personList.length} of ${batch.length} requested`);
+                } catch (error) {
+                    console.error(`[Disponent] Failed to load person batch:`, error);
+                }
+            }
+            
+            console.log(`[Disponent] Loaded ${persons.size} persons (needed ${personIds.size})`);
+            
+            if (persons.size < personIds.size) {
+                console.warn('[Disponent] Missing persons:', personIds.size - persons.size);
+            }
         } catch (error) {
             console.error('[Disponent] Failed to load persons:', error);
         }
