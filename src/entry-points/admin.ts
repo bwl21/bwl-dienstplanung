@@ -234,24 +234,38 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
                 Verwalten Sie verschiedene Planungsszenarien mit eigenen Filtern und Berechtigungen.
             </p>
             
-            ${scenarios.length === 0 ? `
-                <div style="padding: 2rem; text-align: center; background: #f9f9f9; border-radius: 4px; margin-bottom: 1rem;">
-                    <p style="color: #666;">Noch keine Szenarien konfiguriert.</p>
-                    <p style="font-size: 0.9rem; color: #999;">Siehe <a href="https://github.com/bwl21/bwl-dienstplanung/blob/main/docs/scenario-setup-example.md" target="_blank">Dokumentation</a> für Setup-Anleitung.</p>
-                </div>
-            ` : `
-                <div style="margin-bottom: 1rem;">
-                    ${scenarios.map(scenario => `
-                        <div style="border: 1px solid #ddd; border-radius: 4px; padding: 1rem; margin-bottom: 1rem;">
-                            <h3 style="margin: 0 0 0.5rem 0; font-size: 1rem;">${scenario.name}</h3>
-                            <p style="margin: 0 0 0.5rem 0; color: #666; font-size: 0.9rem;">${scenario.description}</p>
-                            
-                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; font-size: 0.85rem; color: #666;">
+            <!-- Existing Scenarios -->
+            ${scenarios.length > 0 ? `
+                <div style="margin-bottom: 1.5rem;">
+                    <h3 style="margin: 0 0 0.5rem 0; font-size: 1rem;">Vorhandene Szenarien</h3>
+                    ${scenarios.map((scenario, index) => `
+                        <div style="border: 1px solid #ddd; border-radius: 4px; padding: 1rem; margin-bottom: 1rem; background: #f9f9f9;">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
                                 <div>
-                                    <strong>Kalender:</strong> ${scenario.calendarIds.length > 0 ? scenario.calendarIds.join(', ') : 'Alle'}
+                                    <h4 style="margin: 0 0 0.25rem 0; font-size: 1rem;">${scenario.name}</h4>
+                                    <p style="margin: 0; color: #666; font-size: 0.9rem;">${scenario.description}</p>
+                                </div>
+                                <button 
+                                    class="delete-scenario-btn" 
+                                    data-index="${index}"
+                                    style="padding: 0.25rem 0.5rem; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;"
+                                >
+                                    Löschen
+                                </button>
+                            </div>
+                            
+                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; font-size: 0.85rem; color: #666; margin-top: 0.5rem;">
+                                <div>
+                                    <strong>Kalender:</strong> ${scenario.calendarIds.length > 0 ? scenario.calendarIds.map(id => {
+                                        const cal = calendars.find(c => c.id === id);
+                                        return cal ? cal.name : id;
+                                    }).join(', ') : 'Alle'}
                                 </div>
                                 <div>
-                                    <strong>Kategorien:</strong> ${scenario.serviceCategoryIds.length > 0 ? scenario.serviceCategoryIds.join(', ') : 'Alle'}
+                                    <strong>Kategorien:</strong> ${scenario.serviceCategoryIds.length > 0 ? scenario.serviceCategoryIds.map(id => {
+                                        const cat = serviceCategories.find(c => c.id === id);
+                                        return cat ? (cat.name || cat.bezeichnung) : id;
+                                    }).join(', ') : 'Alle'}
                                 </div>
                                 <div>
                                     <strong>Gruppen:</strong> ${scenario.serviceGroupIds.length > 0 ? scenario.serviceGroupIds.join(', ') : 'Alle'}
@@ -263,11 +277,111 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
                         </div>
                     `).join('')}
                 </div>
-            `}
+            ` : ''}
             
-            <div style="padding: 1rem; background: #f0f8ff; border: 1px solid #b3d9ff; border-radius: 4px;">
-                <strong>Hinweis:</strong> Szenarien können aktuell nur über die Browser-Console erstellt werden.
-                Siehe <a href="https://github.com/bwl21/bwl-dienstplanung/blob/main/docs/scenario-setup-example.md" target="_blank" style="color: #007bff;">Dokumentation</a> für Details.
+            <!-- New Scenario Form -->
+            <div style="border: 1px solid #ddd; border-radius: 4px; padding: 1.5rem; background: #fff;">
+                <h3 style="margin: 0 0 1rem 0; font-size: 1rem;">Neues Szenario erstellen</h3>
+                
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">ID (eindeutig, z.B. "service"):</label>
+                    <input 
+                        type="text" 
+                        id="scenario-id" 
+                        placeholder="service"
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+                    />
+                </div>
+                
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Name:</label>
+                    <input 
+                        type="text" 
+                        id="scenario-name" 
+                        placeholder="Service"
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+                    />
+                </div>
+                
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Beschreibung:</label>
+                    <input 
+                        type="text" 
+                        id="scenario-description" 
+                        placeholder="Gottesdienst-Planung"
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+                    />
+                </div>
+                
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Kalender (mehrere möglich):</label>
+                    <select 
+                        id="scenario-calendars" 
+                        multiple 
+                        size="5"
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+                    >
+                        ${calendars.map(cal => `
+                            <option value="${cal.id}">${cal.name || cal.title}</option>
+                        `).join('')}
+                    </select>
+                    <small style="color: #666;">Strg/Cmd + Klick für Mehrfachauswahl</small>
+                </div>
+                
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Dienstkategorien (mehrere möglich):</label>
+                    <select 
+                        id="scenario-categories" 
+                        multiple 
+                        size="5"
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+                    >
+                        ${serviceCategories.map(cat => `
+                            <option value="${cat.id}">${cat.name || cat.bezeichnung}</option>
+                        `).join('')}
+                    </select>
+                    <small style="color: #666;">Strg/Cmd + Klick für Mehrfachauswahl</small>
+                </div>
+                
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Besetzergruppen-IDs (kommagetrennt, optional):</label>
+                    <input 
+                        type="text" 
+                        id="scenario-groups" 
+                        placeholder="20, 21, 22"
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+                    />
+                    <small style="color: #666;">Leer lassen für alle Gruppen der ausgewählten Kategorien</small>
+                </div>
+                
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Disponent User-IDs (kommagetrennt):</label>
+                    <input 
+                        type="text" 
+                        id="scenario-disponent-users" 
+                        placeholder="1, 2, 3"
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+                    />
+                </div>
+                
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Mitarbeiter User-IDs (kommagetrennt):</label>
+                    <input 
+                        type="text" 
+                        id="scenario-mitarbeiter-users" 
+                        placeholder="1, 2, 3, 4, 5"
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+                    />
+                </div>
+                
+                <button 
+                    id="create-scenario-btn"
+                    style="width: 100%; padding: 0.75rem; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
+                >
+                    Szenario erstellen
+                </button>
+                
+                <div id="scenario-message" style="margin-top: 1rem; padding: 0.75rem; border-radius: 4px; display: none;"></div>
             </div>
         `;
     }
@@ -396,6 +510,155 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
         }
     }
 
+    async function createScenario() {
+        const scenarioId = (element.querySelector('#scenario-id') as HTMLInputElement)?.value.trim();
+        const scenarioName = (element.querySelector('#scenario-name') as HTMLInputElement)?.value.trim();
+        const scenarioDescription = (element.querySelector('#scenario-description') as HTMLInputElement)?.value.trim();
+        
+        const calendarsSelect = element.querySelector('#scenario-calendars') as HTMLSelectElement;
+        const calendarIds = Array.from(calendarsSelect.selectedOptions).map(opt => Number(opt.value));
+        
+        const categoriesSelect = element.querySelector('#scenario-categories') as HTMLSelectElement;
+        const serviceCategoryIds = Array.from(categoriesSelect.selectedOptions).map(opt => Number(opt.value));
+        
+        const groupsInput = (element.querySelector('#scenario-groups') as HTMLInputElement)?.value.trim();
+        const serviceGroupIds = groupsInput ? groupsInput.split(',').map(s => Number(s.trim())).filter(n => !isNaN(n)) : [];
+        
+        const disponentInput = (element.querySelector('#scenario-disponent-users') as HTMLInputElement)?.value.trim();
+        const disponentPermissions = disponentInput ? disponentInput.split(',').map(s => Number(s.trim())).filter(n => !isNaN(n)) : [];
+        
+        const mitarbeiterInput = (element.querySelector('#scenario-mitarbeiter-users') as HTMLInputElement)?.value.trim();
+        const mitarbeiterPermissions = mitarbeiterInput ? mitarbeiterInput.split(',').map(s => Number(s.trim())).filter(n => !isNaN(n)) : [];
+        
+        const messageDiv = element.querySelector('#scenario-message') as HTMLDivElement;
+        
+        // Validation
+        if (!scenarioId || !scenarioName) {
+            messageDiv.style.display = 'block';
+            messageDiv.style.background = '#fee';
+            messageDiv.style.border = '1px solid #fcc';
+            messageDiv.style.color = '#c00';
+            messageDiv.textContent = 'ID und Name sind Pflichtfelder!';
+            return;
+        }
+        
+        if (scenarios.some(s => s.id === scenarioId)) {
+            messageDiv.style.display = 'block';
+            messageDiv.style.background = '#fee';
+            messageDiv.style.border = '1px solid #fcc';
+            messageDiv.style.color = '#c00';
+            messageDiv.textContent = 'Ein Szenario mit dieser ID existiert bereits!';
+            return;
+        }
+        
+        try {
+            if (!moduleId) throw new Error('Module ID not found');
+            
+            // Get or create scenarios category
+            let scenariosCategory = await getCustomDataCategory<object>('scenarios');
+            if (!scenariosCategory) {
+                scenariosCategory = await createCustomDataCategory({
+                    customModuleId: moduleId,
+                    name: 'Planning Scenarios',
+                    shorty: 'scenarios',
+                    description: 'Configuration for planning scenarios',
+                }, moduleId);
+            }
+            
+            // Create scenario config
+            const scenarioConfig: ScenarioConfig = {
+                id: scenarioId,
+                name: scenarioName,
+                description: scenarioDescription,
+                calendarIds,
+                serviceCategoryIds,
+                serviceGroupIds,
+                disponentPermissions,
+                mitarbeiterPermissions,
+                createdAt: new Date().toISOString(),
+                createdBy: 1 // TODO: Get from user context
+            };
+            
+            // Save scenario
+            await createCustomDataValue({
+                dataCategoryId: scenariosCategory.id,
+                value: JSON.stringify(scenarioConfig),
+            }, moduleId);
+            
+            // Create data categories for scenario
+            await createCustomDataCategory({
+                customModuleId: moduleId,
+                name: `${scenarioId} - Disponent Data`,
+                shorty: `${scenarioId}__disponent`,
+                description: `Disponent planning data for ${scenarioId}`,
+            }, moduleId);
+            
+            await createCustomDataCategory({
+                customModuleId: moduleId,
+                name: `${scenarioId} - Mitarbeiter Data`,
+                shorty: `${scenarioId}__mitarbeiter`,
+                description: `Mitarbeiter data for ${scenarioId}`,
+            }, moduleId);
+            
+            messageDiv.style.display = 'block';
+            messageDiv.style.background = '#d4edda';
+            messageDiv.style.border = '1px solid #c3e6cb';
+            messageDiv.style.color = '#155724';
+            messageDiv.textContent = 'Szenario erfolgreich erstellt!';
+            
+            // Reload scenarios and re-render
+            await loadScenarios();
+            setTimeout(() => render(), 1500);
+            
+        } catch (error) {
+            console.error('[Admin] Failed to create scenario:', error);
+            messageDiv.style.display = 'block';
+            messageDiv.style.background = '#fee';
+            messageDiv.style.border = '1px solid #fcc';
+            messageDiv.style.color = '#c00';
+            messageDiv.textContent = 'Fehler beim Erstellen: ' + (error instanceof Error ? error.message : 'Unbekannter Fehler');
+        }
+    }
+    
+    async function deleteScenario(index: number) {
+        if (!confirm(`Szenario "${scenarios[index].name}" wirklich löschen?`)) {
+            return;
+        }
+        
+        try {
+            if (!moduleId) throw new Error('Module ID not found');
+            
+            const scenariosCategory = await getCustomDataCategory<object>('scenarios');
+            if (!scenariosCategory) throw new Error('Scenarios category not found');
+            
+            const values = await getCustomDataValues<ScenarioConfig>(scenariosCategory.id, moduleId);
+            const valueToDelete = values[index];
+            
+            if (!valueToDelete || !(valueToDelete as any).id) {
+                throw new Error('Scenario value not found');
+            }
+            
+            // Delete scenario value
+            // Note: ChurchTools client doesn't have delete method, use fetch directly
+            const response = await fetch(
+                `/api/modules/${moduleId}/data/categories/${scenariosCategory.id}/values/${(valueToDelete as any).id}`,
+                { method: 'DELETE', headers: { 'Content-Type': 'application/json' } }
+            );
+            
+            if (!response.ok) {
+                throw new Error(`Delete failed: ${response.statusText}`);
+            }
+            
+            // Reload and re-render
+            await loadScenarios();
+            render();
+            
+        } catch (error) {
+            console.error('[Admin] Failed to delete scenario:', error);
+            alert('Fehler beim Löschen: ' + (error instanceof Error ? error.message : 'Unbekannter Fehler'));
+        }
+    }
+
     // Attach event handlers
     function attachEventHandlers() {
         // Tab switcher
@@ -415,6 +678,20 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
                 render();
             });
         }
+        
+        // Scenario management
+        const createScenarioBtn = element.querySelector('#create-scenario-btn');
+        if (createScenarioBtn) {
+            createScenarioBtn.addEventListener('click', createScenario);
+        }
+        
+        const deleteButtons = element.querySelectorAll('.delete-scenario-btn');
+        deleteButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const index = Number((e.target as HTMLElement).dataset.index);
+                deleteScenario(index);
+            });
+        });
         
         // Legacy settings
         const serviceCategorySelect = element.querySelector('#service-category-select') as HTMLSelectElement;

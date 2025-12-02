@@ -195,7 +195,6 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
                     console.log('[Disponent] Loaded service category:', serviceCategoryId);
                 }
             }
-            }
         } catch (error) {
             console.log('[Disponent] Could not load settings:', error);
         }
