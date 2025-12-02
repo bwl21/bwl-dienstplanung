@@ -14,12 +14,30 @@ interface DienstplanungSettings {
     value: string;
 }
 
+interface ScenarioConfig {
+    id: string;
+    name: string;
+    description: string;
+    calendarIds: number[];
+    serviceCategoryIds: number[];
+    serviceGroupIds: number[];
+    disponentPermissions: number[];
+    mitarbeiterPermissions: number[];
+    createdAt: string;
+    createdBy: number;
+}
+
 interface Event {
     id: number;
     name: string;
     startDate: string;
     endDate?: string;
     eventServices?: EventService[];
+    calendar?: {
+        id?: number;
+        title: string;
+        domainIdentifier: string;
+    };
     [key: string]: any;
 }
 
@@ -69,6 +87,7 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
     console.log('[Disponent] Initializing');
     console.log('[Disponent] Current user:', user);
 
+    let currentScenario: ScenarioConfig | null = null;
     let serviceCategoryId: string | null = null;
     let events: Event[] = [];
     let services: Service[] = [];
@@ -130,27 +149,52 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
         }
     }
 
+    async function loadScenarios(): Promise<ScenarioConfig[]> {
+        try {
+            const extensionModule = await getModule(KEY);
+            const category = await getCustomDataCategory<object>('scenarios');
+            
+            if (!category) return [];
+            
+            return await getCustomDataValues<ScenarioConfig>(category.id, extensionModule.id);
+        } catch (error) {
+            console.error('[Disponent] Failed to load scenarios:', error);
+            return [];
+        }
+    }
+
     // Load service category from settings
     async function loadSettings(): Promise<void> {
         try {
             const extensionModule = await getModule(KEY);
             moduleId = extensionModule.id;
 
-            const settingsCategory = await getCustomDataCategory<object>('settings');
-            if (!settingsCategory) {
-                console.log('[Disponent] No settings found');
-                return;
+            // Load scenarios
+            const scenarios = await loadScenarios();
+            
+            if (scenarios.length > 0) {
+                // Use first scenario for now (later: add scenario selector)
+                currentScenario = scenarios[0];
+                console.log('[Disponent] Using scenario:', currentScenario.name);
+            } else {
+                // Fallback to old settings
+                const settingsCategory = await getCustomDataCategory<object>('settings');
+                if (!settingsCategory) {
+                    console.log('[Disponent] No settings found');
+                    return;
+                }
+
+                const values = await getCustomDataValues<DienstplanungSettings>(
+                    settingsCategory.id,
+                    extensionModule.id
+                );
+
+                const serviceCatValue = values.find((v) => v.key === 'serviceCategory');
+                if (serviceCatValue) {
+                    serviceCategoryId = serviceCatValue.value;
+                    console.log('[Disponent] Loaded service category:', serviceCategoryId);
+                }
             }
-
-            const values = await getCustomDataValues<DienstplanungSettings>(
-                settingsCategory.id,
-                extensionModule.id
-            );
-
-            const serviceCatValue = values.find((v) => v.key === 'serviceCategory');
-            if (serviceCatValue) {
-                serviceCategoryId = serviceCatValue.value;
-                console.log('[Disponent] Loaded service category:', serviceCategoryId);
             }
         } catch (error) {
             console.log('[Disponent] Could not load settings:', error);
@@ -168,7 +212,19 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
             console.log('[Disponent] Loading events from', today, 'to', end);
             const response = await churchtoolsClient.get(`/events?from=${today}&to=${end}&limit=100&include=eventServices`);
             console.log('[Disponent] Events response:', response);
-            events = response.data || response || [];
+            let allEvents = response.data || response || [];
+            
+            // Filter events by scenario criteria
+            if (currentScenario && currentScenario.calendarIds.length > 0) {
+                events = allEvents.filter((event: Event) => {
+                    const calendarId = event.calendar?.id || event.calendar?.domainIdentifier;
+                    if (!calendarId) return false;
+                    return currentScenario!.calendarIds.includes(Number(calendarId));
+                });
+                console.log(`[Disponent] Filtered ${allEvents.length} events to ${events.length} by calendar`);
+            } else {
+                events = allEvents;
+            }
             console.log('[Disponent] Loaded events:', events.length);
         } catch (error) {
             console.error('[Disponent] Failed to load events:', error);
@@ -179,10 +235,37 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
     // Load services for the configured category
     async function loadServices(): Promise<void> {
         try {
-            console.log('[Disponent] Loading services for category:', serviceCategoryId);
-            const response = await churchtoolsClient.get(`/services?servicegroup_id=${serviceCategoryId}`);
-            console.log('[Disponent] Services response:', response);
-            services = response.data || response || [];
+            let allServices = [];
+            
+            if (currentScenario && currentScenario.serviceCategoryIds.length > 0) {
+                // Load services for all configured categories
+                for (const categoryId of currentScenario.serviceCategoryIds) {
+                    try {
+                        const response = await churchtoolsClient.get(`/services?servicegroup_id=${categoryId}`);
+                        const categoryServices = response.data || response || [];
+                        allServices.push(...categoryServices);
+                    } catch (error) {
+                        console.error(`[Disponent] Failed to load services for category ${categoryId}:`, error);
+                    }
+                }
+                
+                // Filter by service groups if configured
+                if (currentScenario.serviceGroupIds.length > 0) {
+                    services = allServices.filter((service: Service) => {
+                        return currentScenario!.serviceGroupIds.includes(service.serviceGroupId);
+                    });
+                    console.log(`[Disponent] Filtered ${allServices.length} services to ${services.length} by service groups`);
+                } else {
+                    services = allServices;
+                }
+            } else if (serviceCategoryId) {
+                // Fallback to old behavior
+                console.log('[Disponent] Loading services for category:', serviceCategoryId);
+                const response = await churchtoolsClient.get(`/services?servicegroup_id=${serviceCategoryId}`);
+                services = response.data || response || [];
+            } else {
+                services = [];
+            }
             console.log('[Disponent] Loaded services:', services.length);
         } catch (error) {
             console.error('[Disponent] Failed to load services:', error);

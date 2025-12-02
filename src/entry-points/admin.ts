@@ -22,6 +22,19 @@ interface DienstplanungSettings {
     value: string;
 }
 
+interface ScenarioConfig {
+    id: string;
+    name: string;
+    description: string;
+    calendarIds: number[];
+    serviceCategoryIds: number[];
+    serviceGroupIds: number[];
+    disponentPermissions: number[];
+    mitarbeiterPermissions: number[];
+    createdAt: string;
+    createdBy: number;
+}
+
 const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, churchtoolsClient }) => {
     console.log('[Admin] Initializing Dienstplanung Settings');
     console.log('[Admin] Extension info:', data.extensionInfo);
@@ -31,6 +44,12 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
     let serviceCategoryValue: CustomModuleDataValue | null = null;
     let currentServiceCategoryId = '';
     let serviceCategories: any[] = [];
+    
+    // Scenario management
+    let scenarios: ScenarioConfig[] = [];
+    let calendars: any[] = [];
+    let services: any[] = [];
+    let currentView: 'legacy' | 'scenarios' = 'scenarios';
 
     // UI State
     let isLoading = true;
@@ -51,14 +70,18 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
             moduleId = extensionModule.id;
             console.log('[Admin] Extension module:', extensionModule);
 
-            // Step 2: Load service categories from ChurchTools
-            await loadServiceCategories();
+            // Step 2: Load ChurchTools data
+            await Promise.all([
+                loadServiceCategories(),
+                loadCalendars(),
+                loadScenarios()
+            ]);
 
-            // Step 3: Get or create the settings category
+            // Step 3: Get or create the settings category (legacy)
             settingsCategory = await getOrCreateSettingsCategory();
             console.log('[Admin] Settings category:', settingsCategory);
 
-            // Step 4: Load service category setting
+            // Step 4: Load service category setting (legacy)
             await loadServiceCategorySetting(settingsCategory.id);
 
             isLoading = false;
@@ -69,6 +92,36 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
             isLoading = false;
             errorMessage = error instanceof Error ? error.message : 'Failed to initialize';
             render();
+        }
+    }
+    
+    async function loadCalendars() {
+        try {
+            const response = await churchtoolsClient.get('/calendars');
+            calendars = response.data || response || [];
+            console.log('[Admin] Calendars loaded:', calendars.length);
+        } catch (error) {
+            console.error('[Admin] Failed to load calendars:', error);
+            calendars = [];
+        }
+    }
+    
+    async function loadScenarios() {
+        try {
+            if (!moduleId) return;
+            
+            const category = await getCustomDataCategory<object>('scenarios');
+            if (!category) {
+                scenarios = [];
+                return;
+            }
+            
+            const values = await getCustomDataValues<ScenarioConfig>(category.id, moduleId);
+            scenarios = values;
+            console.log('[Admin] Scenarios loaded:', scenarios.length);
+        } catch (error) {
+            console.error('[Admin] Failed to load scenarios:', error);
+            scenarios = [];
         }
     }
 
@@ -174,9 +227,54 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
     }
 
     // Render UI
+    function renderScenariosView(): string {
+        return `
+            <h2 style="margin: 0 0 1rem 0; font-size: 1.1rem;">Planungsszenarien</h2>
+            <p style="margin: 0 0 1rem 0; color: #666; font-size: 0.9rem;">
+                Verwalten Sie verschiedene Planungsszenarien mit eigenen Filtern und Berechtigungen.
+            </p>
+            
+            ${scenarios.length === 0 ? `
+                <div style="padding: 2rem; text-align: center; background: #f9f9f9; border-radius: 4px; margin-bottom: 1rem;">
+                    <p style="color: #666;">Noch keine Szenarien konfiguriert.</p>
+                    <p style="font-size: 0.9rem; color: #999;">Siehe <a href="https://github.com/bwl21/bwl-dienstplanung/blob/main/docs/scenario-setup-example.md" target="_blank">Dokumentation</a> für Setup-Anleitung.</p>
+                </div>
+            ` : `
+                <div style="margin-bottom: 1rem;">
+                    ${scenarios.map(scenario => `
+                        <div style="border: 1px solid #ddd; border-radius: 4px; padding: 1rem; margin-bottom: 1rem;">
+                            <h3 style="margin: 0 0 0.5rem 0; font-size: 1rem;">${scenario.name}</h3>
+                            <p style="margin: 0 0 0.5rem 0; color: #666; font-size: 0.9rem;">${scenario.description}</p>
+                            
+                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; font-size: 0.85rem; color: #666;">
+                                <div>
+                                    <strong>Kalender:</strong> ${scenario.calendarIds.length > 0 ? scenario.calendarIds.join(', ') : 'Alle'}
+                                </div>
+                                <div>
+                                    <strong>Kategorien:</strong> ${scenario.serviceCategoryIds.length > 0 ? scenario.serviceCategoryIds.join(', ') : 'Alle'}
+                                </div>
+                                <div>
+                                    <strong>Gruppen:</strong> ${scenario.serviceGroupIds.length > 0 ? scenario.serviceGroupIds.join(', ') : 'Alle'}
+                                </div>
+                                <div>
+                                    <strong>Disponenten:</strong> ${scenario.disponentPermissions.length} User
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `}
+            
+            <div style="padding: 1rem; background: #f0f8ff; border: 1px solid #b3d9ff; border-radius: 4px;">
+                <strong>Hinweis:</strong> Szenarien können aktuell nur über die Browser-Console erstellt werden.
+                Siehe <a href="https://github.com/bwl21/bwl-dienstplanung/blob/main/docs/scenario-setup-example.md" target="_blank" style="color: #007bff;">Dokumentation</a> für Details.
+            </div>
+        `;
+    }
+
     function render() {
         element.innerHTML = `
-            <div style="max-width: 600px; margin: 2rem auto; padding: 2rem;">
+            <div style="max-width: 800px; margin: 2rem auto; padding: 2rem;">
                 <!-- Extension Info Header -->
                 <div style="background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem;">
                     <h1 style="margin: 0 0 0.5rem 0; font-size: 1.5rem;">${data.extensionInfo?.name || 'Extension Settings'}</h1>
@@ -189,7 +287,26 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
                         ${data.extensionInfo?.author?.name ? `<span><strong>Author:</strong> ${data.extensionInfo.author.name}</span>` : ''}
                     </div>
                 </div>
+                
+                <!-- Tab Navigation -->
+                <div style="background: #fff; border: 1px solid #ddd; border-radius: 8px 8px 0 0; padding: 0; margin-bottom: 0; border-bottom: none;">
+                    <div style="display: flex; gap: 0;">
+                        <button 
+                            id="tab-scenarios" 
+                            style="flex: 1; padding: 1rem; border: none; background: ${currentView === 'scenarios' ? '#fff' : '#f5f5f5'}; cursor: pointer; font-weight: ${currentView === 'scenarios' ? 'bold' : 'normal'}; border-bottom: ${currentView === 'scenarios' ? '2px solid #007bff' : '2px solid transparent'};"
+                        >
+                            Planungsszenarien
+                        </button>
+                        <button 
+                            id="tab-legacy" 
+                            style="flex: 1; padding: 1rem; border: none; background: ${currentView === 'legacy' ? '#fff' : '#f5f5f5'}; cursor: pointer; font-weight: ${currentView === 'legacy' ? 'bold' : 'normal'}; border-bottom: ${currentView === 'legacy' ? '2px solid #007bff' : '2px solid transparent'};"
+                        >
+                            Legacy Einstellungen
+                        </button>
+                    </div>
+                </div>
 
+                <div style="background: #fff; border: 1px solid #ddd; border-radius: 0 0 8px 8px; padding: 1.5rem; border-top: none;">
                 ${
                     isLoading
                         ? `
@@ -203,7 +320,9 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
                         <strong>Error:</strong> ${errorMessage}
                     </div>
                 `
-                          : `
+                          : currentView === 'scenarios'
+                            ? renderScenariosView()
+                            : `
                     <!-- Settings Form -->
                     <div style="background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem;">
                         <h2 style="margin: 0 0 1rem 0; font-size: 1.1rem;">Dienstkategorie</h2>
@@ -268,6 +387,7 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
                     </div>
                 `
                 }
+                </div>
             </div>
         `;
 
@@ -278,6 +398,25 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
 
     // Attach event handlers
     function attachEventHandlers() {
+        // Tab switcher
+        const tabScenarios = element.querySelector('#tab-scenarios');
+        const tabLegacy = element.querySelector('#tab-legacy');
+        
+        if (tabScenarios) {
+            tabScenarios.addEventListener('click', () => {
+                currentView = 'scenarios';
+                render();
+            });
+        }
+        
+        if (tabLegacy) {
+            tabLegacy.addEventListener('click', () => {
+                currentView = 'legacy';
+                render();
+            });
+        }
+        
+        // Legacy settings
         const serviceCategorySelect = element.querySelector('#service-category-select') as HTMLSelectElement;
         const saveBtn = element.querySelector('#save-btn') as HTMLButtonElement;
 
