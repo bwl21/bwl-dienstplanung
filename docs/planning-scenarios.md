@@ -16,8 +16,12 @@ graph LR
     
     B --> B1[ID: service]
     B --> B2[Name: Service]
-    B --> B3[Service-Kategorie]
+    B --> B3[Auswahlkriterien]
     B --> B4[Berechtigungen]
+    
+    B3 --> B3a[Kalender]
+    B3 --> B3b[Dienstkategorien]
+    B3 --> B3c[Besetzergruppen]
     
     C --> C1[Assignments]
     C --> C2[Nur Disponenten]
@@ -30,7 +34,10 @@ Ein Planungsszenario repräsentiert einen Planungskontext mit:
 - **ID:** Eindeutiger Identifier (z.B. "service", "technik-gz", "deko")
 - **Name:** Anzeigename (z.B. "Service", "Technik-GZ", "Deko")
 - **Beschreibung:** Erklärung des Szenarios
-- **Service-Kategorie:** Verknüpfung zu ChurchTools Dienstkategorie
+- **Auswahlkriterien:** Welche Events und Dienste gehören zu diesem Szenario
+  - **Kalender:** Mehrere ChurchTools Kalender-IDs
+  - **Dienstkategorien:** Mehrere ChurchTools Service Category IDs
+  - **Besetzergruppen:** Mehrere Service Group IDs (Auswahl innerhalb der Kategorien)
 - **Berechtigungen:** Separate Listen für Disponent- und Mitarbeiter-Zugriff
 
 ### Datentypen pro Szenario
@@ -116,7 +123,9 @@ erDiagram
         string id
         string name
         string description
-        string serviceCategoryId
+        array calendarIds
+        array serviceCategoryIds
+        array serviceGroupIds
         array disponentPermissions
         array mitarbeiterPermissions
         string createdAt
@@ -125,13 +134,17 @@ erDiagram
 ```
 
 Gespeichert in Kategorie `scenarios`:
-- ID des Szenarios
-- Anzeigename
-- Beschreibung
-- ChurchTools Service Category ID
-- Liste der User-IDs mit Disponent-Berechtigung
-- Liste der User-IDs mit Mitarbeiter-Berechtigung
-- Erstellungszeitpunkt und Ersteller
+- **ID des Szenarios** - Eindeutiger Identifier
+- **Anzeigename** - Name für UI
+- **Beschreibung** - Erklärung des Szenarios
+- **Kalender-IDs** - Array von ChurchTools Kalender-IDs (mehrere möglich)
+- **Dienstkategorie-IDs** - Array von ChurchTools Service Category IDs (mehrere möglich)
+- **Dienstbesetzergruppen-IDs** - Array von Service Group IDs (mehrere möglich)
+  - Eine Dienstkategorie kann mehrere Besetzergruppen haben
+  - Hier wird ausgewählt, welche Gruppen relevant sind
+- **Disponent-Berechtigungen** - Liste der User-IDs mit Disponent-Zugriff
+- **Mitarbeiter-Berechtigungen** - Liste der User-IDs mit Mitarbeiter-Zugriff
+- **Erstellungszeitpunkt und Ersteller** - Audit-Informationen
 
 ### Disponent-Daten (Assignments)
 
@@ -182,6 +195,31 @@ Gespeichert in Kategorie `{scenario-id}__mitarbeiter`:
 
 ## Workflow
 
+### Event- und Dienst-Filterung
+
+```mermaid
+flowchart TD
+    A[Lade alle Events] --> B{Event in Kalender?}
+    B -->|Ja| C{Event hat Services?}
+    B -->|Nein| Z[Ignorieren]
+    C -->|Ja| D{Service in Kategorie?}
+    C -->|Nein| Z
+    D -->|Ja| E{Service in Besetzergruppe?}
+    D -->|Nein| Z
+    E -->|Ja| F[Event/Service für Szenario relevant]
+    E -->|Nein| Z
+```
+
+**Beispiel:**
+- Szenario "Service" konfiguriert:
+  - Kalender: [1, 2] (Gottesdienst, Jugendgottesdienst)
+  - Dienstkategorien: [10, 11] (Technik, Musik)
+  - Besetzergruppen: [20, 21, 22] (Technik-Team A, Musik-Band, Musik-Chor)
+
+→ Nur Events aus Kalender 1 oder 2 werden geladen
+→ Nur Services aus Kategorie 10 oder 11 werden angezeigt
+→ Nur Besetzergruppen 20, 21, 22 werden berücksichtigt
+
 ### Berechtigungsprüfung
 
 ```mermaid
@@ -193,10 +231,13 @@ flowchart TD
     C -->|Beide| F[Zeige beide Views]
     C -->|Keine| G[Zeige Fehlermeldung]
     
-    D --> H[Lade Assignments]
-    E --> I[Lade Availabilities]
+    D --> H[Lade gefilterte Events/Services]
+    E --> I[Lade gefilterte Events/Services]
     F --> H
     F --> I
+    
+    H --> J[Lade Assignments]
+    I --> K[Lade Availabilities]
 ```
 
 ### Daten-Zugriff
@@ -222,7 +263,16 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    A[Szenario erstellen] --> B[Config in 'scenarios' speichern]
+    A[Szenario konfigurieren] --> A1[Kalender auswählen]
+    A --> A2[Dienstkategorien auswählen]
+    A --> A3[Besetzergruppen auswählen]
+    A --> A4[Berechtigungen setzen]
+    
+    A1 --> B[Config in 'scenarios' speichern]
+    A2 --> B
+    A3 --> B
+    A4 --> B
+    
     B --> C[Disponent-Kategorie erstellen]
     B --> D[Mitarbeiter-Kategorie erstellen]
     C --> E[service__disponent]
@@ -278,17 +328,93 @@ Nutze ChurchTools-Gruppen für Berechtigungen (z.B. "Service-Disponent", "Servic
 
 Kombiniere User-IDs und Gruppen-IDs für maximale Flexibilität.
 
+## Konfigurationsbeispiele
+
+### Beispiel 1: Service (Gottesdienst)
+
+```mermaid
+graph TD
+    S[Szenario: Service] --> K[Kalender]
+    S --> DK[Dienstkategorien]
+    S --> BG[Besetzergruppen]
+    
+    K --> K1[Gottesdienst]
+    K --> K2[Jugendgottesdienst]
+    
+    DK --> DK1[Technik]
+    DK --> DK2[Musik]
+    DK --> DK3[Moderation]
+    
+    BG --> BG1[Technik-Team A]
+    BG --> BG2[Technik-Team B]
+    BG --> BG3[Musik-Band]
+    BG --> BG4[Musik-Chor]
+```
+
+**Konfiguration:**
+- Kalender: [1, 2] - Gottesdienst, Jugendgottesdienst
+- Dienstkategorien: [10, 11, 12] - Technik, Musik, Moderation
+- Besetzergruppen: [20, 21, 22, 23] - Technik-Team A/B, Musik-Band/Chor
+
+### Beispiel 2: Technik-GZ (Gemeinschaftszentrum)
+
+```mermaid
+graph TD
+    S[Szenario: Technik-GZ] --> K[Kalender]
+    S --> DK[Dienstkategorien]
+    S --> BG[Besetzergruppen]
+    
+    K --> K1[GZ-Veranstaltungen]
+    
+    DK --> DK1[Technik]
+    
+    BG --> BG1[Technik-Team C]
+```
+
+**Konfiguration:**
+- Kalender: [3] - GZ-Veranstaltungen
+- Dienstkategorien: [10] - Technik
+- Besetzergruppen: [24] - Technik-Team C (speziell für GZ)
+
+### Beispiel 3: Deko (Alle Veranstaltungen)
+
+```mermaid
+graph TD
+    S[Szenario: Deko] --> K[Kalender]
+    S --> DK[Dienstkategorien]
+    S --> BG[Besetzergruppen]
+    
+    K --> K1[Gottesdienst]
+    K --> K2[Jugendgottesdienst]
+    K --> K3[GZ-Veranstaltungen]
+    K --> K4[Feste]
+    
+    DK --> DK1[Dekoration]
+    
+    BG --> BG1[Deko-Team]
+```
+
+**Konfiguration:**
+- Kalender: [1, 2, 3, 4] - Alle Veranstaltungskalender
+- Dienstkategorien: [15] - Dekoration
+- Besetzergruppen: [30] - Deko-Team
+
 ## Best Practices
 
 ```mermaid
 mindmap
   root((Best Practices))
+    Konfiguration
+      Klare Szenario-Namen
+      Sinnvolle Filterung
+      Nicht zu viele Szenarien
     Initialisierung
       Szenarien beim Start erstellen
       Kategorien vorbereiten
     Performance
       Berechtigungen cachen
       Batch-Operationen
+      Gefilterte API-Calls
     Sicherheit
       Berechtigungen prüfen
       Audit-Logging
@@ -298,11 +424,13 @@ mindmap
       Intuitive Navigation
 ```
 
-1. **Initialisierung:** Erstelle alle Szenarien beim ersten Start
-2. **Caching:** Cache Berechtigungen für Performance
-3. **Fehlerbehandlung:** Zeige benutzerfreundliche Fehlermeldungen bei fehlenden Berechtigungen
-4. **Audit:** Logge alle Berechtigungs-Prüfungen
-5. **UI-Feedback:** Zeige deutlich, welche Berechtigungen der User hat
+1. **Szenario-Design:** Überlege gut, welche Szenarien sinnvoll sind (nicht zu viele, nicht zu wenige)
+2. **Filterung:** Nutze Kalender/Kategorien/Gruppen um relevante Events zu begrenzen
+3. **Initialisierung:** Erstelle alle Szenarien beim ersten Start
+4. **Caching:** Cache Berechtigungen und Szenario-Configs für Performance
+5. **Fehlerbehandlung:** Zeige benutzerfreundliche Fehlermeldungen bei fehlenden Berechtigungen
+6. **Audit:** Logge alle Berechtigungs-Prüfungen
+7. **UI-Feedback:** Zeige deutlich, welche Berechtigungen der User hat
 
 ## Migration
 
