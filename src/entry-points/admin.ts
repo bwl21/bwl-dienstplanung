@@ -639,15 +639,9 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
             }
             
             // Delete scenario value
-            // Note: ChurchTools client doesn't have delete method, use fetch directly
-            const response = await fetch(
-                `/api/modules/${moduleId}/data/categories/${scenariosCategory.id}/values/${(valueToDelete as any).id}`,
-                { method: 'DELETE', headers: { 'Content-Type': 'application/json' } }
+            await churchtoolsClient.deleteApi(
+                `/modules/${moduleId}/data/categories/${scenariosCategory.id}/values/${(valueToDelete as any).id}`
             );
-            
-            if (!response.ok) {
-                throw new Error(`Delete failed: ${response.statusText}`);
-            }
             
             // Reload and re-render
             await loadScenarios();
