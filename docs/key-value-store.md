@@ -519,6 +519,369 @@ In production, the module is created when the extension is installed. Use `getMo
 const module = await getModule(KEY);
 ```
 
+## Advanced Pattern: Planning Scenarios with Permissions
+
+### Use Case: Multiple Planning Contexts
+
+For complex planning scenarios, you may need:
+- Multiple planning contexts (e.g., "Service", "Technik-GZ", "Deko")
+- Different data types per context (e.g., "Disponent" data, "Mitarbeiter" data)
+- Separate permissions for each data type
+
+### Solution: Hierarchical Category Structure
+
+Use a naming convention to organize categories hierarchically:
+
+```
+{scenario}-{dataType}
+```
+
+**Examples:**
+- `service-disponent` - Disponent data for Service planning
+- `service-mitarbeiter` - Mitarbeiter data for Service planning
+- `technik-gz-disponent` - Disponent data for Technik-GZ planning
+- `technik-gz-mitarbeiter` - Mitarbeiter data for Technik-GZ planning
+- `deko-disponent` - Disponent data for Deko planning
+- `deko-mitarbeiter` - Mitarbeiter data for Deko planning
+
+### Data Model
+
+```typescript
+interface PlanningScenario {
+    id: string;              // e.g., "service", "technik-gz", "deko"
+    name: string;            // e.g., "Service", "Technik-GZ", "Deko"
+    description: string;
+    serviceCategoryId: string; // ChurchTools service category
+    permissions: {
+        disponent: number[];   // User/Group IDs with disponent access
+        mitarbeiter: number[]; // User/Group IDs with mitarbeiter access
+    };
+}
+
+interface ScenarioData {
+    scenario: string;        // e.g., "service"
+    dataType: 'disponent' | 'mitarbeiter';
+    // ... actual data fields
+}
+```
+
+### Implementation
+
+#### 1. Store Scenario Configuration
+
+```typescript
+// Store in 'scenarios' category
+interface ScenarioConfig {
+    id: string;
+    name: string;
+    description: string;
+    serviceCategoryId: string;
+    disponentPermissions: number[];
+    mitarbeiterPermissions: number[];
+}
+
+async function createScenario(config: ScenarioConfig): Promise<void> {
+    const module = await getModule();
+    
+    // Get or create scenarios category
+    let category = await getCustomDataCategory<object>('scenarios');
+    if (!category) {
+        category = await createCustomDataCategory({
+            customModuleId: module.id,
+            name: 'Planning Scenarios',
+            shorty: 'scenarios',
+            description: 'Configuration for planning scenarios',
+        }, module.id);
+    }
+    
+    // Store scenario config
+    await createCustomDataValue({
+        dataCategoryId: category.id,
+        value: JSON.stringify(config),
+    }, module.id);
+}
+
+async function getScenarios(): Promise<ScenarioConfig[]> {
+    const module = await getModule();
+    const category = await getCustomDataCategory<object>('scenarios');
+    
+    if (!category) return [];
+    
+    return await getCustomDataValues<ScenarioConfig>(category.id, module.id);
+}
+```
+
+#### 2. Create Data Categories per Scenario
+
+```typescript
+async function initializeScenario(scenarioId: string): Promise<void> {
+    const module = await getModule();
+    
+    // Create disponent category
+    const disponentCat = await getCustomDataCategory<object>(`${scenarioId}-disponent`);
+    if (!disponentCat) {
+        await createCustomDataCategory({
+            customModuleId: module.id,
+            name: `${scenarioId} - Disponent Data`,
+            shorty: `${scenarioId}-disponent`,
+            description: `Disponent planning data for ${scenarioId}`,
+        }, module.id);
+    }
+    
+    // Create mitarbeiter category
+    const mitarbeiterCat = await getCustomDataCategory<object>(`${scenarioId}-mitarbeiter`);
+    if (!mitarbeiterCat) {
+        await createCustomDataCategory({
+            customModuleId: module.id,
+            name: `${scenarioId} - Mitarbeiter Data`,
+            shorty: `${scenarioId}-mitarbeiter`,
+            description: `Mitarbeiter data for ${scenarioId}`,
+        }, module.id);
+    }
+}
+```
+
+#### 3. Permission Checking
+
+```typescript
+async function hasAccess(
+    scenarioId: string,
+    dataType: 'disponent' | 'mitarbeiter',
+    userId: number
+): Promise<boolean> {
+    const scenarios = await getScenarios();
+    const scenario = scenarios.find(s => s.id === scenarioId);
+    
+    if (!scenario) return false;
+    
+    const permissions = dataType === 'disponent' 
+        ? scenario.disponentPermissions 
+        : scenario.mitarbeiterPermissions;
+    
+    return permissions.includes(userId);
+}
+
+async function checkAccessOrThrow(
+    scenarioId: string,
+    dataType: 'disponent' | 'mitarbeiter',
+    userId: number
+): Promise<void> {
+    const hasPermission = await hasAccess(scenarioId, dataType, userId);
+    
+    if (!hasPermission) {
+        throw new Error(
+            `User ${userId} does not have ${dataType} access to scenario ${scenarioId}`
+        );
+    }
+}
+```
+
+#### 4. Data Access with Permission Check
+
+```typescript
+interface Assignment {
+    eventId: number;
+    serviceId: number;
+    userId: number;
+    assignedBy: number;
+    assignedAt: string;
+}
+
+async function getAssignments(
+    scenarioId: string,
+    currentUserId: number
+): Promise<Assignment[]> {
+    // Check permission
+    await checkAccessOrThrow(scenarioId, 'disponent', currentUserId);
+    
+    const module = await getModule();
+    const category = await getCustomDataCategory<object>(`${scenarioId}-disponent`);
+    
+    if (!category) return [];
+    
+    return await getCustomDataValues<Assignment>(category.id, module.id);
+}
+
+async function createAssignment(
+    scenarioId: string,
+    assignment: Assignment,
+    currentUserId: number
+): Promise<void> {
+    // Check permission
+    await checkAccessOrThrow(scenarioId, 'disponent', currentUserId);
+    
+    const module = await getModule();
+    const category = await getCustomDataCategory<object>(`${scenarioId}-disponent`);
+    
+    if (!category) {
+        throw new Error(`Category ${scenarioId}-disponent not found`);
+    }
+    
+    await createCustomDataValue({
+        dataCategoryId: category.id,
+        value: JSON.stringify(assignment),
+    }, module.id);
+}
+```
+
+#### 5. UI Integration
+
+```typescript
+async function initializeUI(currentUserId: number): Promise<void> {
+    const scenarios = await getScenarios();
+    
+    // Filter scenarios by permission
+    const accessibleScenarios = [];
+    
+    for (const scenario of scenarios) {
+        const hasDisponentAccess = await hasAccess(
+            scenario.id, 
+            'disponent', 
+            currentUserId
+        );
+        const hasMitarbeiterAccess = await hasAccess(
+            scenario.id, 
+            'mitarbeiter', 
+            currentUserId
+        );
+        
+        if (hasDisponentAccess || hasMitarbeiterAccess) {
+            accessibleScenarios.push({
+                ...scenario,
+                canEditDisponent: hasDisponentAccess,
+                canViewMitarbeiter: hasMitarbeiterAccess,
+            });
+        }
+    }
+    
+    // Render scenario selector
+    renderScenarioSelector(accessibleScenarios);
+}
+
+function renderScenarioSelector(scenarios: any[]): void {
+    const html = `
+        <select id="scenario-selector">
+            ${scenarios.map(s => `
+                <option value="${s.id}">
+                    ${s.name}
+                    ${s.canEditDisponent ? ' (Disponent)' : ''}
+                    ${s.canViewMitarbeiter ? ' (Mitarbeiter)' : ''}
+                </option>
+            `).join('')}
+        </select>
+    `;
+    
+    document.getElementById('scenario-container')!.innerHTML = html;
+}
+```
+
+### Complete Example
+
+```typescript
+// 1. Setup scenarios
+await createScenario({
+    id: 'service',
+    name: 'Service',
+    description: 'Gottesdienst-Planung',
+    serviceCategoryId: '123',
+    disponentPermissions: [1, 2, 3], // User IDs
+    mitarbeiterPermissions: [1, 2, 3, 4, 5, 6],
+});
+
+await createScenario({
+    id: 'technik-gz',
+    name: 'Technik-GZ',
+    description: 'Technik Gemeinschaftszentrum',
+    serviceCategoryId: '456',
+    disponentPermissions: [7, 8],
+    mitarbeiterPermissions: [7, 8, 9, 10],
+});
+
+await createScenario({
+    id: 'deko',
+    name: 'Deko',
+    description: 'Dekoration',
+    serviceCategoryId: '789',
+    disponentPermissions: [11],
+    mitarbeiterPermissions: [11, 12, 13],
+});
+
+// 2. Initialize categories
+await initializeScenario('service');
+await initializeScenario('technik-gz');
+await initializeScenario('deko');
+
+// 3. Use with permissions
+const currentUserId = 1; // From ChurchTools session
+
+try {
+    // Load assignments for Service scenario
+    const assignments = await getAssignments('service', currentUserId);
+    
+    // Create new assignment
+    await createAssignment('service', {
+        eventId: 100,
+        serviceId: 200,
+        userId: 300,
+        assignedBy: currentUserId,
+        assignedAt: new Date().toISOString(),
+    }, currentUserId);
+    
+} catch (error) {
+    console.error('Permission denied:', error);
+}
+```
+
+### Benefits
+
+1. **Clear Organization:** Each scenario has dedicated categories
+2. **Flexible Permissions:** Different access levels per scenario and data type
+3. **Scalable:** Easy to add new scenarios
+4. **Type-Safe:** TypeScript interfaces for all data
+5. **Auditable:** Track who created/modified data via `assignedBy` fields
+
+### Category Naming Convention
+
+```
+{scenario-id}-{data-type}
+
+Examples:
+- service-disponent
+- service-mitarbeiter
+- service-availabilities
+- technik-gz-disponent
+- technik-gz-mitarbeiter
+- deko-disponent
+- deko-mitarbeiter
+```
+
+### Permission Storage Options
+
+**Option 1: In Scenario Config (Recommended)**
+```typescript
+interface ScenarioConfig {
+    id: string;
+    disponentPermissions: number[];
+    mitarbeiterPermissions: number[];
+}
+```
+
+**Option 2: Separate Permissions Category**
+```typescript
+// Store in 'permissions' category
+interface Permission {
+    scenarioId: string;
+    dataType: 'disponent' | 'mitarbeiter';
+    userIds: number[];
+    groupIds: number[];
+}
+```
+
+**Option 3: ChurchTools Groups**
+- Create ChurchTools groups: "Service-Disponent", "Service-Mitarbeiter"
+- Check group membership via ChurchTools API
+- More integrated with ChurchTools permission system
+
 ## See Also
 
 - [Core Concepts](core-concepts.md) - Understanding extension architecture
