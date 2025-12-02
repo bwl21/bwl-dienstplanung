@@ -40,11 +40,11 @@ graph TD
     S[Szenario: Service] --> D[Disponent-Daten]
     S --> M[Mitarbeiter-Daten]
     
-    D --> D1[Kategorie: service-disponent]
+    D --> D1[Kategorie: service__disponent]
     D1 --> D2[Assignments]
     D1 --> D3[Nur für Disponenten]
     
-    M --> M1[Kategorie: service-mitarbeiter]
+    M --> M1[Kategorie: service__mitarbeiter]
     M1 --> M2[Availabilities]
     M1 --> M3[Nur für Mitarbeiter]
 ```
@@ -53,11 +53,11 @@ Jedes Szenario hat zwei Datentypen:
 
 1. **Disponent-Daten:** Planungsdaten (Assignments, etc.)
    - Nur für Disponenten sichtbar/editierbar
-   - Kategorie: `{scenario-id}-disponent`
+   - Kategorie: `{scenario-id}__disponent`
 
 2. **Mitarbeiter-Daten:** Verfügbarkeiten, Präferenzen
    - Für Mitarbeiter sichtbar/editierbar
-   - Kategorie: `{scenario-id}-mitarbeiter`
+   - Kategorie: `{scenario-id}__mitarbeiter`
 
 ## Custom Data Kategorien
 
@@ -67,12 +67,12 @@ Jedes Szenario hat zwei Datentypen:
 graph TD
     A[Extension Module] --> B[scenarios]
     A --> C[settings]
-    A --> D[service-disponent]
-    A --> E[service-mitarbeiter]
-    A --> F[technik-gz-disponent]
-    A --> G[technik-gz-mitarbeiter]
-    A --> H[deko-disponent]
-    A --> I[deko-mitarbeiter]
+    A --> D[service__disponent]
+    A --> E[service__mitarbeiter]
+    A --> F[technik-gz__disponent]
+    A --> G[technik-gz__mitarbeiter]
+    A --> H[deko__disponent]
+    A --> I[deko__mitarbeiter]
     
     B --> B1[Szenario-Konfigurationen]
     C --> C1[Globale Einstellungen]
@@ -87,16 +87,24 @@ graph TD
 ### Naming Convention
 
 ```
-{scenario-id}-{data-type}
+{scenario-id}__{data-type}
 ```
 
+**Doppel-Unterstrich `__` als Trennzeichen** für klare Trennung zwischen Szenario-ID und Datentyp.
+
 **Beispiele:**
-- `service-disponent` - Disponent-Daten für Service
-- `service-mitarbeiter` - Mitarbeiter-Daten für Service
-- `technik-gz-disponent` - Disponent-Daten für Technik-GZ
-- `technik-gz-mitarbeiter` - Mitarbeiter-Daten für Technik-GZ
-- `deko-disponent` - Disponent-Daten für Deko
-- `deko-mitarbeiter` - Mitarbeiter-Daten für Deko
+- `service__disponent` - Disponent-Daten für Service
+- `service__mitarbeiter` - Mitarbeiter-Daten für Service
+- `technik-gz__disponent` - Disponent-Daten für Technik-GZ
+- `technik-gz__mitarbeiter` - Mitarbeiter-Daten für Technik-GZ
+- `deko__disponent` - Disponent-Daten für Deko
+- `deko__mitarbeiter` - Mitarbeiter-Daten für Deko
+
+**Parsing:**
+```javascript
+const [scenarioId, dataType] = categoryName.split('__');
+// "technik-gz__mitarbeiter" → ["technik-gz", "mitarbeiter"]
+```
 
 ## Datenmodell
 
@@ -143,7 +151,7 @@ erDiagram
     }
 ```
 
-Gespeichert in Kategorie `{scenario-id}-disponent`:
+Gespeichert in Kategorie `{scenario-id}__disponent`:
 - Event-ID und Service-ID
 - Zugewiesene Person (User-ID oder null)
 - Wer hat zugewiesen und wann
@@ -165,7 +173,7 @@ erDiagram
     }
 ```
 
-Gespeichert in Kategorie `{scenario-id}-mitarbeiter`:
+Gespeichert in Kategorie `{scenario-id}__mitarbeiter`:
 - Event-ID und Service-ID
 - User-ID
 - Verfügbarkeits-Status (yes, maybe, no, absent)
@@ -217,8 +225,8 @@ flowchart LR
     A[Szenario erstellen] --> B[Config in 'scenarios' speichern]
     B --> C[Disponent-Kategorie erstellen]
     B --> D[Mitarbeiter-Kategorie erstellen]
-    C --> E[service-disponent]
-    D --> F[service-mitarbeiter]
+    C --> E[service__disponent]
+    D --> F[service__mitarbeiter]
 ```
 
 ## Berechtigungs-Optionen
@@ -301,16 +309,16 @@ mindmap
 ```mermaid
 flowchart LR
     A[Alte Daten] --> B[Default-Szenario erstellen]
-    B --> C[Daten nach default-disponent verschieben]
-    B --> D[Daten nach default-mitarbeiter verschieben]
+    B --> C[Daten nach default__disponent verschieben]
+    B --> D[Daten nach default__mitarbeiter verschieben]
     C --> E[Berechtigungen setzen]
     D --> E
 ```
 
 Wenn bereits Daten ohne Szenarien existieren:
 1. Erstelle ein "default" Szenario
-2. Verschiebe bestehende Assignments nach `default-disponent`
-3. Verschiebe bestehende Availabilities nach `default-mitarbeiter`
+2. Verschiebe bestehende Assignments nach `default__disponent`
+3. Verschiebe bestehende Availabilities nach `default__mitarbeiter`
 4. Setze passende Berechtigungen
 
 ## Siehe auch

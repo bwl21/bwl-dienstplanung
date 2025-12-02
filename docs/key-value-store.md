@@ -533,16 +533,24 @@ For complex planning scenarios, you may need:
 Use a naming convention to organize categories hierarchically:
 
 ```
-{scenario}-{dataType}
+{scenario}__{dataType}
 ```
 
+**Double underscore `__` as separator** for clear distinction between scenario ID and data type.
+
 **Examples:**
-- `service-disponent` - Disponent data for Service planning
-- `service-mitarbeiter` - Mitarbeiter data for Service planning
-- `technik-gz-disponent` - Disponent data for Technik-GZ planning
-- `technik-gz-mitarbeiter` - Mitarbeiter data for Technik-GZ planning
-- `deko-disponent` - Disponent data for Deko planning
-- `deko-mitarbeiter` - Mitarbeiter data for Deko planning
+- `service__disponent` - Disponent data for Service planning
+- `service__mitarbeiter` - Mitarbeiter data for Service planning
+- `technik-gz__disponent` - Disponent data for Technik-GZ planning
+- `technik-gz__mitarbeiter` - Mitarbeiter data for Technik-GZ planning
+- `deko__disponent` - Disponent data for Deko planning
+- `deko__mitarbeiter` - Mitarbeiter data for Deko planning
+
+**Parsing:**
+```javascript
+const [scenarioId, dataType] = categoryName.split('__');
+// "technik-gz__mitarbeiter" → ["technik-gz", "mitarbeiter"]
+```
 
 ### Data Model
 
@@ -618,23 +626,23 @@ async function initializeScenario(scenarioId: string): Promise<void> {
     const module = await getModule();
     
     // Create disponent category
-    const disponentCat = await getCustomDataCategory<object>(`${scenarioId}-disponent`);
+    const disponentCat = await getCustomDataCategory<object>(`${scenarioId}__disponent`);
     if (!disponentCat) {
         await createCustomDataCategory({
             customModuleId: module.id,
             name: `${scenarioId} - Disponent Data`,
-            shorty: `${scenarioId}-disponent`,
+            shorty: `${scenarioId}__disponent`,
             description: `Disponent planning data for ${scenarioId}`,
         }, module.id);
     }
     
     // Create mitarbeiter category
-    const mitarbeiterCat = await getCustomDataCategory<object>(`${scenarioId}-mitarbeiter`);
+    const mitarbeiterCat = await getCustomDataCategory<object>(`${scenarioId}__mitarbeiter`);
     if (!mitarbeiterCat) {
         await createCustomDataCategory({
             customModuleId: module.id,
             name: `${scenarioId} - Mitarbeiter Data`,
-            shorty: `${scenarioId}-mitarbeiter`,
+            shorty: `${scenarioId}__mitarbeiter`,
             description: `Mitarbeiter data for ${scenarioId}`,
         }, module.id);
     }
@@ -695,7 +703,7 @@ async function getAssignments(
     await checkAccessOrThrow(scenarioId, 'disponent', currentUserId);
     
     const module = await getModule();
-    const category = await getCustomDataCategory<object>(`${scenarioId}-disponent`);
+    const category = await getCustomDataCategory<object>(`${scenarioId}__disponent`);
     
     if (!category) return [];
     
@@ -711,10 +719,10 @@ async function createAssignment(
     await checkAccessOrThrow(scenarioId, 'disponent', currentUserId);
     
     const module = await getModule();
-    const category = await getCustomDataCategory<object>(`${scenarioId}-disponent`);
+    const category = await getCustomDataCategory<object>(`${scenarioId}__disponent`);
     
     if (!category) {
-        throw new Error(`Category ${scenarioId}-disponent not found`);
+        throw new Error(`Category ${scenarioId}__disponent not found`);
     }
     
     await createCustomDataValue({
@@ -843,16 +851,16 @@ try {
 ### Category Naming Convention
 
 ```
-{scenario-id}-{data-type}
+{scenario-id}__{data-type}
 
 Examples:
-- service-disponent
-- service-mitarbeiter
-- service-availabilities
-- technik-gz-disponent
-- technik-gz-mitarbeiter
-- deko-disponent
-- deko-mitarbeiter
+- service__disponent
+- service__mitarbeiter
+- service__availabilities
+- technik-gz__disponent
+- technik-gz__mitarbeiter
+- deko__disponent
+- deko__mitarbeiter
 ```
 
 ### Permission Storage Options
