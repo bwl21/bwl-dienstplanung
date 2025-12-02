@@ -9,10 +9,6 @@ import { getModule, getCustomDataCategory, getCustomDataValues, createCustomData
  * Zeigt Verfügbarkeiten aller Mitarbeiter und ermöglicht intelligente Zuweisungen.
  */
 
-interface DienstplanungSettings {
-    key: string;
-    value: string;
-}
 
 interface ScenarioConfig {
     shortName: string;
@@ -92,7 +88,6 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
 
     let scenarios: ScenarioConfig[] = [];
     let currentScenario: ScenarioConfig | null = null;
-    let serviceCategoryId: string | null = null;
     let events: Event[] = [];
     let services: Service[] = [];
     let availabilities: Map<string, Availability> = new Map();
@@ -116,11 +111,11 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
             isLoading = true;
             render();
 
-            // Load settings
+            // Load scenarios
             await loadSettings();
 
-            if (!serviceCategoryId) {
-                errorMessage = 'Keine Dienstkategorie konfiguriert. Bitte in den Admin-Einstellungen konfigurieren.';
+            if (!currentScenario) {
+                errorMessage = 'Kein Szenario konfiguriert. Bitte in den Admin-Einstellungen ein Szenario erstellen.';
                 isLoading = false;
                 render();
                 return;
@@ -138,7 +133,7 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
             console.log('[Disponent] Loaded data:', {
                 events: events.length,
                 services: services.length,
-                serviceCategoryId,
+                scenario: currentScenario?.shortName,
                 eventsWithServices: events.filter(e => (e.eventServices || []).length > 0).length,
                 persons: persons.size
             });
@@ -179,27 +174,9 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
             
             if (scenarios.length > 0) {
                 // Try to load saved scenario from localStorage
-                const savedScenarioId = localStorage.getItem('bwl-dienstplanung-scenario');
-                currentScenario = scenarios.find(s => s.shortName === savedScenarioId) || scenarios[0];
+                const savedScenarioShortName = localStorage.getItem('bwl-dienstplanung-scenario');
+                currentScenario = scenarios.find(s => s.shortName === savedScenarioShortName) || scenarios[0];
                 console.log('[Disponent] Using scenario:', currentScenario.name);
-            } else {
-                // Fallback to old settings
-                const settingsCategory = await getCustomDataCategory<object>('settings');
-                if (!settingsCategory) {
-                    console.log('[Disponent] No settings found');
-                    return;
-                }
-
-                const values = await getCustomDataValues<DienstplanungSettings>(
-                    settingsCategory.id,
-                    extensionModule.id
-                );
-
-                const serviceCatValue = values.find((v) => v.key === 'serviceCategory');
-                if (serviceCatValue) {
-                    serviceCategoryId = serviceCatValue.value;
-                    console.log('[Disponent] Loaded service category:', serviceCategoryId);
-                }
             }
         } catch (error) {
             console.log('[Disponent] Could not load settings:', error);
@@ -275,11 +252,6 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
                 } else {
                     services = allServices;
                 }
-            } else if (serviceCategoryId) {
-                // Fallback to old behavior
-                console.log('[Disponent] Loading services for category:', serviceCategoryId);
-                const response = await churchtoolsClient.get(`/services?servicegroup_id=${serviceCategoryId}`) as any;
-                services = response.data || response || [];
             } else {
                 services = [];
             }
@@ -537,7 +509,7 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
             const requestedServices = (event.eventServices || [])
                 .filter(es => {
                     const service = services.find(s => s.id === es.serviceId);
-                    return service && service.serviceGroupId.toString() === serviceCategoryId;
+                    return service && service !== undefined;
                 });
             
             // Apply service filter if selected
@@ -595,7 +567,7 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
         const requestedServices = (event.eventServices || [])
             .filter(es => {
                 const service = services.find(s => s.id === es.serviceId);
-                return service && service.serviceGroupId.toString() === serviceCategoryId;
+                return service && service !== undefined;
             })
             .map(es => services.find(s => s.id === es.serviceId))
             .filter(s => s !== undefined);

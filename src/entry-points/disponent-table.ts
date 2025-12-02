@@ -9,10 +9,6 @@ import { getModule, getCustomDataCategory, getCustomDataValues, createCustomData
  * Zeigt Events mit aggregierten Diensten und Verfügbarkeiten.
  */
 
-interface DienstplanungSettings {
-    key: string;
-    value: string;
-}
 
 interface ScenarioConfig {
     shortName: string;
@@ -91,7 +87,6 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
 
     let scenarios: ScenarioConfig[] = [];
     let currentScenario: ScenarioConfig | null = null;
-    let serviceCategoryId: string | null = null;
     let events: Event[] = [];
     let services: Service[] = [];
     let availabilities: Map<string, Availability> = new Map();
@@ -115,8 +110,8 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
 
             await loadSettings();
 
-            if (!serviceCategoryId) {
-                errorMessage = 'Keine Dienstkategorie konfiguriert.';
+            if (!currentScenario) {
+                errorMessage = 'Kein Szenario konfiguriert. Bitte in den Admin-Einstellungen ein Szenario erstellen.';
                 isLoading = false;
                 render();
                 return;
@@ -175,20 +170,6 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
                 const savedScenarioShortName = localStorage.getItem('bwl-dienstplanung-scenario');
                 currentScenario = scenarios.find(s => s.shortName === savedScenarioShortName) || scenarios[0];
                 console.log('[Disponent-Table] Using scenario:', currentScenario.name);
-            } else {
-                // Fallback to old settings
-                const settingsCategory = await getCustomDataCategory<object>('settings');
-                if (!settingsCategory) return;
-
-                const values = await getCustomDataValues<DienstplanungSettings>(
-                    settingsCategory.id,
-                    extensionModule.id
-                );
-
-                const serviceCatValue = values.find((v) => v.key === 'serviceCategory');
-                if (serviceCatValue) {
-                    serviceCategoryId = serviceCatValue.value;
-                }
             }
         } catch (error) {
             console.log('[Disponent-Table] Could not load settings:', error);
@@ -272,10 +253,6 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
                 } else {
                     services = allServices;
                 }
-            } else if (serviceCategoryId) {
-                // Fallback to old behavior
-                const response = await churchtoolsClient.get(`/services?servicegroup_id=${serviceCategoryId}`) as any;
-                services = response.data || response || [];
             } else {
                 services = [];
             }
@@ -548,7 +525,7 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
             const requestedServices = (event.eventServices || [])
                 .filter(es => {
                     const service = services.find(s => s.id === es.serviceId);
-                    return service && service.serviceGroupId.toString() === serviceCategoryId;
+                    return service && service !== undefined;
                 });
             return requestedServices.length > 0;
         });
@@ -595,7 +572,7 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
         const requestedServices = (event.eventServices || [])
             .filter(es => {
                 const service = services.find(s => s.id === es.serviceId);
-                return service && service.serviceGroupId.toString() === serviceCategoryId;
+                return service && service !== undefined;
             });
 
         // Count assigned services
