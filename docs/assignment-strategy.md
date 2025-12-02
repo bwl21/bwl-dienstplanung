@@ -25,14 +25,26 @@ interface EventService {
 interface Assignment {
     eventId: number;
     serviceId: number;
-    userId: number;
+    userId: number | null;           // null = Dienst soll frei bleiben
     assignedBy: number;
     assignedAt: string;
     status: 'assigned' | 'confirmed' | 'declined';
     isExternal: boolean;
     externalName?: string;
+    publishedAt?: string;            // Wann wurde nach CT geschrieben
+    publishedPersonId?: number | null; // Was wurde nach CT geschrieben
 }
 ```
+
+**Felder-Erklärung:**
+- `userId`: Geplante Person (null = Dienst frei lassen)
+- `assignedBy`: Wer hat die Planung gemacht
+- `assignedAt`: Wann wurde geplant
+- `status`: Workflow-Status (für spätere Erweiterungen)
+- `isExternal`: Person nicht in ChurchTools
+- `externalName`: Name für externe Personen
+- `publishedAt`: Zeitstempel des letzten Publish
+- `publishedPersonId`: Was beim letzten Publish geschrieben wurde (für Änderungs-Erkennung)
 
 ### Custom Data Availability
 ```typescript
@@ -100,7 +112,7 @@ Trennung zwischen Planung (Custom Data) und Veröffentlichung (ChurchTools).
 - ❌ **Daten-Inkonsistenz:** Publish-Fehler, Rollback-Strategie nötig
 - ❌ **Performance:** Viele API-Calls beim Publish, Rate-Limiting möglich
 
-### Implementierung
+### Implementierung (vereinfacht)
 ```typescript
 // 1. Assignment erstellen
 async function assignPerson(eventId, serviceId, personId) {
@@ -115,22 +127,21 @@ async function assignPerson(eventId, serviceId, personId) {
     });
 }
 
-// 2. Publish
+// 2. Publish (vereinfacht - siehe detaillierte Version unten)
 async function publishAssignments(eventId) {
     const assignments = getAssignmentsForEvent(eventId);
     
     for (const assignment of assignments) {
-        if (assignment.status === 'confirmed') {
-            // Update ChurchTools EventService
-            await churchtoolsClient.patch(
-                `/events/${eventId}/services/${assignment.serviceId}`,
-                { personId: assignment.userId }
-            );
-            
-            // Mark as published
-            assignment.published = true;
-            await updateCustomDataValue(assignment);
-        }
+        // Update ChurchTools EventService
+        await churchtoolsClient.patch(
+            `/events/${eventId}/services/${assignment.serviceId}`,
+            { personId: assignment.userId }
+        );
+        
+        // Mark as published
+        assignment.publishedAt = new Date().toISOString();
+        assignment.publishedPersonId = assignment.userId;
+        await updateCustomDataValue(assignment);
     }
 }
 ```
@@ -290,43 +301,319 @@ async function confirmAssignment(eventId, serviceId) {
 
 ## Empfehlung
 
-**Für den Start: Option 1.5 (Vereinfachter Zwei-Phasen-Ansatz)**
+**Entscheidung: Option 1 (Zwei-Phasen-Ansatz)**
 
 ### Begründung
-- Guter Kompromiss zwischen Sicherheit und Einfachheit
-- Nutzt ChurchTools-Features (`isAccepted`)
-- Einfacher zu implementieren als Option 1
-- Sicherer als Option 2
-- Kann später zu Option 1 erweitert werden
+Die identifizierten Nachteile sind unter folgenden Bedingungen beherrschbar:
 
-### Migrations-Pfad
+1. **Kein Multi-User-Problem:** Nur ein Disponent arbeitet gleichzeitig
+2. **Synchronisation beim Laden:** Extension gleicht beim Start mit ChurchTools ab
+3. **ChurchTools bleibt Single Source of Truth:** Extension ist nur Planungs-UI
+4. **Umbesetzung möglich:** Auch bereits in CT besetzte Dienste können neu geplant werden
+
+### Vereinfachungen durch diese Bedingungen
+
+**Keine Konflikte zwischen Disponenten:**
+- Kein Locking/Versionierung nötig
+- Keine Konfliktauflösung erforderlich
+
+**Synchronisation ist einfach:**
+- Beim Laden: ChurchTools → Custom Data
+- Beim Publish: Custom Data → ChurchTools
+- Klare Richtung, keine Bidirektionalität während der Arbeit
+
+**Umbesetzung-Workflow:**
 ```
-Phase 1: Option 1.5 implementieren
-└─> Basis-Funktionalität mit isAccepted-Flag
-
-Phase 2: Bei Bedarf zu Option 1 erweitern
-└─> Custom Data für komplexere Workflows
-└─> Publish-Funktion hinzufügen
+1. Extension lädt Event mit personId=123 aus ChurchTools
+2. Disponent plant um auf personId=456 (Custom Data)
+3. UI zeigt beide:
+   - "Aktuell in CT: Person 123"
+   - "Geplant: Person 456"
+4. Publish überschreibt ChurchTools mit 456
 ```
 
 ---
+
+## Synchronisations-Szenarien
+
+### Szenario 1: Erste Planung
+```
+ChurchTools: Dienst nicht besetzt (personId = null)
+Custom Data: Keine Assignment
+→ Disponent plant Person A
+→ Custom Data: Assignment mit userId = A
+→ UI: "Geplant: Person A" (neu)
+→ Publish: ChurchTools personId = A
+```
+
+### Szenario 2: Umbesetzung
+```
+ChurchTools: Dienst besetzt mit Person A (personId = A)
+Custom Data: Keine Assignment (oder alte Assignment)
+→ Beim Laden: currentPersonId = A, plannedPersonId = A
+→ Disponent plant um auf Person B
+→ Custom Data: Assignment mit userId = B
+→ UI: "Aktuell: Person A, Geplant: Person B" (geändert)
+→ Publish: ChurchTools personId = B
+```
+
+### Szenario 3: Planung verwerfen
+```
+ChurchTools: Dienst besetzt mit Person A
+Custom Data: Assignment mit userId = B
+→ UI: "Aktuell: Person A, Geplant: Person B"
+→ Disponent verwirft Planung
+→ Custom Data: Assignment gelöscht
+→ UI: "Aktuell: Person A" (unverändert)
+```
+
+### Szenario 4: Externe Änderung in ChurchTools
+```
+Session Start:
+  ChurchTools: personId = A
+  Custom Data: Assignment userId = B
+  → UI: "Aktuell: Person A, Geplant: Person B"
+
+Jemand ändert in ChurchTools direkt auf Person C
+
+Nächster Session Start:
+  ChurchTools: personId = C
+  Custom Data: Assignment userId = B (veraltet)
+  → UI: "Aktuell: Person C, Geplant: Person B"
+  → Warnung: "ChurchTools wurde extern geändert"
+  
+Optionen:
+  1. Planung beibehalten (B publishen → überschreibt C)
+  2. Planung verwerfen (C akzeptieren)
+  3. Neu planen (andere Person)
+```
+
+### Szenario 5: Dienst entfernen
+```
+ChurchTools: Dienst besetzt mit Person A
+Custom Data: Keine Assignment
+→ Disponent will Dienst frei lassen
+→ Custom Data: Assignment mit userId = null, status = 'removed'
+→ UI: "Aktuell: Person A, Geplant: (frei)" (entfernt)
+→ Publish: ChurchTools personId = null
+```
 
 ## Offene Fragen
 
-1. **Benachrichtigungen:** Wann und wie sollen Personen benachrichtigt werden?
-2. **Berechtigungen:** Wer darf Dienste zuweisen/bestätigen?
-3. **Externe Personen:** Wie werden nicht-ChurchTools-Benutzer behandelt?
-4. **Konfliktauflösung:** Was passiert bei gleichzeitigen Änderungen?
-5. **Historisierung:** Sollen Änderungen protokolliert werden?
-6. **Bulk-Operationen:** Mehrere Zuweisungen auf einmal?
+1. **Benachrichtigungen:** 
+   - Beim Publish automatisch benachrichtigen?
+   - Oder manueller "Benachrichtigen"-Button?
+   - ChurchTools-eigene Benachrichtigungen nutzen?
+
+2. **Berechtigungen:** 
+   - Wer darf Dienste zuweisen? (Aktuell: alle mit Extension-Zugriff)
+   - Wer darf publishen? (Aktuell: alle mit Extension-Zugriff)
+
+3. **Externe Personen:** 
+   - `isExternal` Flag und `externalName` bereits im Datenmodell
+   - Wie werden diese in UI dargestellt?
+   - Können externe Personen in ChurchTools geschrieben werden?
+
+4. **Historisierung:** 
+   - Custom Data behält alte Assignments
+   - Soll es eine History-Ansicht geben?
+   - Wann werden alte Assignments gelöscht?
+
+5. **Fehlerbehandlung beim Publish:**
+   - Was wenn einzelne Updates fehlschlagen?
+   - Rollback oder partial success?
+   - Wie wird Benutzer informiert?
+
+6. **Bulk-Operationen:** 
+   - "Publish all changes" Button?
+   - Oder nur einzeln publishen?
+   - Preview vor Bulk-Publish?
 
 ---
 
+## Detaillierter Workflow für Option 1
+
+### Beim Laden der Extension
+
+```typescript
+async function loadAndSyncData() {
+    // 1. Lade ChurchTools Events mit EventServices
+    const events = await loadEvents(); // enthält personId aus CT
+    
+    // 2. Lade Custom Data Assignments (Planung)
+    const assignments = await loadAssignments();
+    
+    // 3. Merge für UI
+    events.forEach(event => {
+        event.eventServices.forEach(es => {
+            const assignment = assignments.get(`${event.id}-${es.serviceId}`);
+            
+            es.currentPersonId = es.personId;  // Aus ChurchTools
+            es.plannedPersonId = assignment?.userId || null;  // Aus Planung
+            es.hasChanges = es.currentPersonId !== es.plannedPersonId;
+        });
+    });
+}
+```
+
+### UI-Darstellung
+
+```
+Event: Gottesdienst 15.12.2024
+├─ Dienst: Technik
+│  ├─ Aktuell in CT: Max Mustermann
+│  ├─ Geplant: Maria Schmidt ⚠️ (Änderung)
+│  └─ [Publish] Button
+│
+├─ Dienst: Musik
+│  ├─ Aktuell in CT: (nicht besetzt)
+│  ├─ Geplant: Tom Weber ⚠️ (Neu)
+│  └─ [Publish] Button
+│
+└─ Dienst: Moderation
+   ├─ Aktuell in CT: Anna Klein
+   ├─ Geplant: Anna Klein ✓ (Unverändert)
+   └─ [Bereits in CT]
+```
+
+### Status-Übergänge
+
+```typescript
+interface EventServiceState {
+    currentPersonId: number | null;  // Aus ChurchTools
+    plannedPersonId: number | null;  // Aus Custom Data
+    status: 'unchanged' | 'new' | 'changed' | 'removed';
+}
+
+function getStatus(es: EventServiceState): string {
+    if (es.currentPersonId === null && es.plannedPersonId === null) {
+        return 'unchanged';  // Nicht besetzt, keine Planung
+    }
+    if (es.currentPersonId === null && es.plannedPersonId !== null) {
+        return 'new';  // Neu geplant
+    }
+    if (es.currentPersonId !== null && es.plannedPersonId === null) {
+        return 'removed';  // Geplant zu entfernen
+    }
+    if (es.currentPersonId !== es.plannedPersonId) {
+        return 'changed';  // Umbesetzung geplant
+    }
+    return 'unchanged';  // Gleiche Person
+}
+```
+
+### Publish-Funktion
+
+```typescript
+async function publishAssignments(eventId: number) {
+    const event = events.find(e => e.id === eventId);
+    
+    for (const es of event.eventServices) {
+        const status = getStatus(es);
+        
+        if (status === 'unchanged') {
+            continue;  // Nichts zu tun
+        }
+        
+        // Update ChurchTools
+        await churchtoolsClient.patch(
+            `/events/${eventId}/services/${es.id}`,
+            { personId: es.plannedPersonId }
+        );
+        
+        // Update Custom Data: markiere als published
+        const assignment = assignments.get(`${eventId}-${es.serviceId}`);
+        if (assignment) {
+            assignment.publishedAt = new Date().toISOString();
+            await updateCustomDataValue(assignment);
+        }
+        
+        // Sync state
+        es.currentPersonId = es.plannedPersonId;
+        es.hasChanges = false;
+    }
+}
+```
+
+### Umbesetzung-Workflow
+
+```typescript
+// Szenario: Dienst ist in CT mit Person A besetzt, 
+// Disponent plant um auf Person B
+
+async function reassignService(eventId: number, serviceId: number, newPersonId: number) {
+    // 1. Finde EventService
+    const es = findEventService(eventId, serviceId);
+    
+    // es.currentPersonId = 123 (Person A, aus ChurchTools)
+    // es.plannedPersonId = 123 (noch keine Änderung)
+    
+    // 2. Erstelle/Update Assignment in Custom Data
+    await createOrUpdateAssignment({
+        eventId,
+        serviceId,
+        userId: newPersonId,  // Person B
+        assignedBy: currentUser.id,
+        assignedAt: new Date().toISOString(),
+        status: 'assigned'
+    });
+    
+    // 3. Update UI state
+    es.plannedPersonId = newPersonId;  // Person B
+    es.hasChanges = true;  // 123 !== newPersonId
+    
+    // 4. UI zeigt jetzt:
+    // "Aktuell in CT: Person A"
+    // "Geplant: Person B" ⚠️
+}
+```
+
+### Löschen einer Planung
+
+```typescript
+async function cancelPlannedAssignment(eventId: number, serviceId: number) {
+    const es = findEventService(eventId, serviceId);
+    
+    // Lösche Assignment aus Custom Data
+    await deleteAssignment(eventId, serviceId);
+    
+    // Zurück zum ChurchTools-Stand
+    es.plannedPersonId = es.currentPersonId;
+    es.hasChanges = false;
+}
+```
+
+### Bulk-Publish
+
+```typescript
+async function publishAllChanges() {
+    const changedServices = getAllEventServices()
+        .filter(es => es.hasChanges);
+    
+    console.log(`Publishing ${changedServices.length} changes...`);
+    
+    for (const es of changedServices) {
+        try {
+            await publishAssignment(es.eventId, es.serviceId);
+        } catch (error) {
+            console.error(`Failed to publish ${es.eventId}-${es.serviceId}:`, error);
+            // Sammle Fehler, aber fahre fort
+        }
+    }
+    
+    // Reload um sicherzustellen, dass alles synchron ist
+    await loadAndSyncData();
+}
+```
+
 ## Nächste Schritte
 
-1. Entscheidung für eine Option treffen
+1. ✅ Entscheidung für Option 1 getroffen
 2. API-Endpunkte in ChurchTools prüfen (PATCH `/events/{id}/services/{serviceId}`)
-3. Prototyp implementieren
-4. Mit Test-Daten testen
-5. Feedback einholen
-6. Produktiv schalten
+3. Datenmodell für Assignment Custom Data finalisieren
+4. Sync-Logik beim Laden implementieren
+5. UI für Status-Anzeige (current vs. planned) implementieren
+6. Assignment-Funktion implementieren
+7. Publish-Funktion implementieren
+8. Mit Test-Daten testen
+9. Produktiv schalten
