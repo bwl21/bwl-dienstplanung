@@ -15,7 +15,7 @@ interface DienstplanungSettings {
 }
 
 interface ScenarioConfig {
-    id: string;
+    shortName: string;
     name: string;
     description: string;
     calendarIds: number[];
@@ -25,6 +25,9 @@ interface ScenarioConfig {
     mitarbeiterPermissions: number[];
     createdAt: string;
     createdBy: number;
+    // Metadata from Custom Data Value:
+    id?: number;
+    dataCategoryId?: number;
 }
 
 interface Event {
@@ -146,7 +149,7 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
             if (scenarios.length > 0) {
                 // Try to load saved scenario from localStorage
                 const savedScenarioId = localStorage.getItem('bwl-dienstplanung-scenario');
-                currentScenario = scenarios.find(s => s.id === savedScenarioId) || scenarios[0];
+                currentScenario = scenarios.find(s => s.shortName === savedScenarioId) || scenarios[0];
                 console.log('[Dienstplanung] Using scenario:', currentScenario.name);
             } else {
                 // Fallback to old settings
@@ -173,7 +176,7 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
     }
     
     async function switchScenario(scenarioId: string) {
-        const newScenario = scenarios.find(s => s.id === scenarioId);
+        const newScenario = scenarios.find(s => s.shortName === scenarioId);
         if (!newScenario) return;
         
         currentScenario = newScenario;
@@ -189,7 +192,7 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
         try {
             const today = new Date().toISOString().split('T')[0];
             console.log('[Dienstplanung] Loading events from', today);
-            const response = await churchtoolsClient.get(`/events?from=${today}&limit=50&include=eventServices`);
+            const response = await churchtoolsClient.get(`/events?from=${today}&limit=50&include=eventServices`) as any;
             console.log('[Dienstplanung] Events response:', response);
             let allEvents = response.data || response || [];
             
@@ -220,7 +223,7 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
                 // Load services for all configured categories
                 for (const categoryId of currentScenario.serviceCategoryIds) {
                     try {
-                        const response = await churchtoolsClient.get(`/services?servicegroup_id=${categoryId}`);
+                        const response = await churchtoolsClient.get(`/services?servicegroup_id=${categoryId}`) as any;
                         const categoryServices = response.data || response || [];
                         allServices.push(...categoryServices);
                     } catch (error) {
@@ -240,7 +243,7 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
             } else if (serviceCategoryId) {
                 // Fallback to old behavior
                 console.log('[Dienstplanung] Loading services for category:', serviceCategoryId);
-                const response = await churchtoolsClient.get(`/services?servicegroup_id=${serviceCategoryId}`);
+                const response = await churchtoolsClient.get(`/services?servicegroup_id=${serviceCategoryId}`) as any;
                 services = response.data || response || [];
             } else {
                 services = [];
@@ -428,7 +431,7 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
                     style="width: 100%; max-width: 400px; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
                 >
                     ${scenarios.map(scenario => `
-                        <option value="${scenario.id}" ${currentScenario?.id === scenario.id ? 'selected' : ''}>
+                        <option value="${scenario.shortName}" ${currentScenario?.shortName === scenario.shortName ? 'selected' : ''}>
                             ${scenario.name} - ${scenario.description}
                         </option>
                     `).join('')}

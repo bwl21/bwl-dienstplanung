@@ -1,6 +1,6 @@
 import type { EntryPoint } from '../lib/main';
 import type { MainModuleData } from '@churchtools/extension-points/main';
-import { getModule, getCustomDataCategory, getCustomDataValues, createCustomDataValue, updateCustomDataValue, createCustomDataCategory } from '../utils/kv-store';
+import { getModule, getCustomDataCategory, getCustomDataValues, createCustomDataCategory } from '../utils/kv-store';
 
 /**
  * Disponent Table Entry Point
@@ -15,7 +15,7 @@ interface DienstplanungSettings {
 }
 
 interface ScenarioConfig {
-    id: string;
+    shortName: string;
     name: string;
     description: string;
     calendarIds: number[];
@@ -25,6 +25,9 @@ interface ScenarioConfig {
     mitarbeiterPermissions: number[];
     createdAt: string;
     createdBy: number;
+    // Metadata from Custom Data Value:
+    id?: number;
+    dataCategoryId?: number;
 }
 
 interface Event {
@@ -83,7 +86,7 @@ interface Person {
     [key: string]: any;
 }
 
-const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient, KEY, user }) => {
+const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient, KEY }) => {
     console.log('[Disponent-Table] Initializing');
 
     let scenarios: ScenarioConfig[] = [];
@@ -97,12 +100,12 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
     let isLoading = true;
     let errorMessage = '';
     let moduleId: number | null = null;
+    // @ts-ignore - Used for category tracking
     let availabilityCategory: any = null;
+    // @ts-ignore - Used for category tracking
     let assignmentCategory: any = null;
 
     // Filter state
-    let selectedRoomId: string | null = null;
-    let selectedCalendarIds: string[] = [];
     let dateRange: number = 28;
 
     async function initialize() {
@@ -169,8 +172,8 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
             
             if (scenarios.length > 0) {
                 // Try to load saved scenario from localStorage
-                const savedScenarioId = localStorage.getItem('bwl-dienstplanung-scenario');
-                currentScenario = scenarios.find(s => s.id === savedScenarioId) || scenarios[0];
+                const savedScenarioShortName = localStorage.getItem('bwl-dienstplanung-scenario');
+                currentScenario = scenarios.find(s => s.shortName === savedScenarioShortName) || scenarios[0];
                 console.log('[Disponent-Table] Using scenario:', currentScenario.name);
             } else {
                 // Fallback to old settings
@@ -192,12 +195,12 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
         }
     }
     
-    async function switchScenario(scenarioId: string) {
-        const newScenario = scenarios.find(s => s.id === scenarioId);
+    async function switchScenario(shortName: string) {
+        const newScenario = scenarios.find(s => s.shortName === shortName);
         if (!newScenario) return;
         
         currentScenario = newScenario;
-        localStorage.setItem('bwl-dienstplanung-scenario', scenarioId);
+        localStorage.setItem('bwl-dienstplanung-scenario', shortName);
         console.log('[Disponent-Table] Switched to scenario:', currentScenario.name);
         
         // Reload data
@@ -224,7 +227,7 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
             endDate.setDate(endDate.getDate() + dateRange);
             const end = endDate.toISOString().split('T')[0];
             
-            const response = await churchtoolsClient.get(`/events?from=${today}&to=${end}&limit=100&include=eventServices`);
+            const response = await churchtoolsClient.get(`/events?from=${today}&to=${end}&limit=100&include=eventServices`) as any;
             let allEvents = response.data || response || [];
             
             // Filter events by scenario criteria
@@ -252,7 +255,7 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
                 // Load services for all configured categories
                 for (const categoryId of currentScenario.serviceCategoryIds) {
                     try {
-                        const response = await churchtoolsClient.get(`/services?servicegroup_id=${categoryId}`);
+                        const response = await churchtoolsClient.get(`/services?servicegroup_id=${categoryId}`) as any;
                         const categoryServices = response.data || response || [];
                         allServices.push(...categoryServices);
                     } catch (error) {
@@ -271,7 +274,7 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
                 }
             } else if (serviceCategoryId) {
                 // Fallback to old behavior
-                const response = await churchtoolsClient.get(`/services?servicegroup_id=${serviceCategoryId}`);
+                const response = await churchtoolsClient.get(`/services?servicegroup_id=${serviceCategoryId}`) as any;
                 services = response.data || response || [];
             } else {
                 services = [];
@@ -376,7 +379,7 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
                 const url = `/persons?${params.toString()}`;
                 
                 try {
-                    const response = await churchtoolsClient.get(url);
+                    const response = await churchtoolsClient.get(url) as any;
                     const personList = response.data || response || [];
                     
                     personList.forEach((p: Person) => {
@@ -504,7 +507,7 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
                     style="width: 100%; max-width: 400px; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
                 >
                     ${scenarios.map(scenario => `
-                        <option value="${scenario.id}" ${currentScenario?.id === scenario.id ? 'selected' : ''}>
+                        <option value="${scenario.shortName}" ${currentScenario?.shortName === scenario.shortName ? 'selected' : ''}>
                             ${scenario.name} - ${scenario.description}
                         </option>
                     `).join('')}
@@ -584,7 +587,7 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
     }
 
     function renderEventRow(event: Event) {
-        const { date, time } = formatDateTime(event.startDate);
+        const { date } = formatDateTime(event.startDate);
         const timeRange = formatTimeRange(event.startDate, event.endDate);
         const room = getEventRoom(event);
 
