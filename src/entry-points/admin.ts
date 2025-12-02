@@ -322,16 +322,43 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
                             </tr>
                         </thead>
                         <tbody>
-                            ${filteredScenarios.map((scenario) => `
+                            ${filteredScenarios.map((scenario) => {
+                                // Render calendar chips
+                                const calendarChips = scenario.calendarIds.length > 0
+                                    ? scenario.calendarIds.map(id => {
+                                        const cal = calendars.find(c => c.id === id);
+                                        const name = cal?.name || `#${id}`;
+                                        const color = cal?.color || '#007bff';
+                                        return `<span style="display: inline-block; padding: 0.15rem 0.5rem; background: ${color}; color: white; border-radius: 12px; font-size: 0.75rem; margin: 0.1rem;">${name}</span>`;
+                                    }).join('')
+                                    : '<span style="color: #999;">-</span>';
+                                
+                                // Render category chips
+                                const categoryChips = scenario.serviceCategoryIds.length > 0
+                                    ? scenario.serviceCategoryIds.map(id => {
+                                        const cat = serviceCategories.find(c => c.id === id);
+                                        const name = cat?.name || cat?.bezeichnung || `#${id}`;
+                                        return `<span style="display: inline-block; padding: 0.15rem 0.5rem; background: #28a745; color: white; border-radius: 12px; font-size: 0.75rem; margin: 0.1rem;">${name}</span>`;
+                                    }).join('')
+                                    : '<span style="color: #999;">-</span>';
+                                
+                                // Render group chips
+                                const groupChips = scenario.serviceGroupIds.length > 0 
+                                    ? scenario.serviceGroupIds.map(id => {
+                                        return `<span style="display: inline-block; padding: 0.15rem 0.5rem; background: #6c757d; color: white; border-radius: 12px; font-size: 0.75rem; margin: 0.1rem;">#${id}</span>`;
+                                    }).join('')
+                                    : '<span style="color: #999;">-</span>';
+                                
+                                return `
                                 <tr style="border-bottom: 1px solid #dee2e6;">
-                                    <td style="padding: 0.75rem; font-family: monospace; font-size: 0.85rem; color: #999;">#${scenario.id || '?'}</td>
-                                    <td style="padding: 0.75rem; font-family: monospace; font-size: 0.9rem;">${scenario.shortName}</td>
-                                    <td style="padding: 0.75rem; font-weight: 500;">${scenario.name}</td>
-                                    <td style="padding: 0.75rem; color: #666;">${scenario.description}</td>
-                                    <td style="padding: 0.75rem; text-align: center;">${scenario.calendarIds.length || '-'}</td>
-                                    <td style="padding: 0.75rem; text-align: center;">${scenario.serviceCategoryIds.length || '-'}</td>
-                                    <td style="padding: 0.75rem; text-align: center;">${scenario.serviceGroupIds.length || '-'}</td>
-                                    <td style="padding: 0.75rem; text-align: center;">
+                                    <td style="padding: 0.75rem; font-family: monospace; font-size: 0.85rem; color: #999; vertical-align: top;">#${scenario.id || '?'}</td>
+                                    <td style="padding: 0.75rem; font-family: monospace; font-size: 0.9rem; vertical-align: top;">${scenario.shortName}</td>
+                                    <td style="padding: 0.75rem; font-weight: 500; vertical-align: top;">${scenario.name}</td>
+                                    <td style="padding: 0.75rem; color: #666; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top;" title="${scenario.description}">${scenario.description}</td>
+                                    <td style="padding: 0.75rem; vertical-align: top;">${calendarChips}</td>
+                                    <td style="padding: 0.75rem; vertical-align: top;">${categoryChips}</td>
+                                    <td style="padding: 0.75rem; vertical-align: top;">${groupChips}</td>
+                                    <td style="padding: 0.75rem; text-align: center; vertical-align: top;">
                                         <button 
                                             class="edit-scenario-btn" 
                                             data-index="${scenarios.indexOf(scenario)}"
@@ -347,8 +374,8 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
                                             Löschen
                                         </button>
                                     </td>
-                                </tr>
-                            `).join('')}
+                                </tr>`;
+                            }).join('')}
                         </tbody>
                     </table>
                 </div>
@@ -415,13 +442,12 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
                         
                         <div style="margin-bottom: 1rem;">
                             <label style="display: block; margin-bottom: 0.25rem; font-weight: 500;">Beschreibung:</label>
-                            <input 
-                                type="text" 
+                            <textarea 
                                 id="scenario-description" 
-                                value="${scenario.description}"
                                 placeholder="Gottesdienst-Planung"
-                                style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
-                            />
+                                rows="3"
+                                style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-family: inherit; resize: vertical;"
+                            >${scenario.description}</textarea>
                         </div>
                         
                         <div style="margin-bottom: 1rem;">
@@ -862,8 +888,8 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
                 
                 console.log('[Admin] Updating scenario:', { shortName, technicalId });
                 
-                // Update via API
-                await churchtoolsClient.patch(
+                // Update via API using PUT
+                await churchtoolsClient.put(
                     `/custommodules/${moduleId}/customdatacategories/${scenariosCategory.id}/customdatavalues/${technicalId}`,
                     { value: JSON.stringify(scenarioConfig) }
                 );
