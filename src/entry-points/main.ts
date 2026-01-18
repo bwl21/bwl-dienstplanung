@@ -132,9 +132,9 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
         try {
             const today = new Date().toISOString().split('T')[0];
             console.log('[Dienstplanung] Loading events from', today);
-            const response = await churchtoolsClient.get(`/events?from=${today}&limit=50&include=eventServices`);
+            const response = await churchtoolsClient.get(`/events?from=${today}&limit=50&include=eventServices`) as { data?: Event[] };
             console.log('[Dienstplanung] Events response:', response);
-            events = response.data || response || [];
+            events = response.data || (response as unknown as Event[]) || [];
             console.log('[Dienstplanung] Loaded events:', events.length);
         } catch (error) {
             console.error('[Dienstplanung] Failed to load events:', error);
@@ -146,9 +146,9 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
     async function loadServices(): Promise<void> {
         try {
             console.log('[Dienstplanung] Loading services for category:', serviceCategoryId);
-            const response = await churchtoolsClient.get(`/services?servicegroup_id=${serviceCategoryId}`);
+            const response = await churchtoolsClient.get(`/services?servicegroup_id=${serviceCategoryId}`) as { data?: Service[] };
             console.log('[Dienstplanung] Services response:', response);
-            services = response.data || response || [];
+            services = response.data || (response as unknown as Service[]) || [];
             console.log('[Dienstplanung] Loaded services:', services.length);
         } catch (error) {
             console.error('[Dienstplanung] Failed to load services:', error);

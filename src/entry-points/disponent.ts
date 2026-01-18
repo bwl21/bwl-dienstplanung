@@ -78,12 +78,10 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
     let isLoading = true;
     let errorMessage = '';
     let moduleId: number | null = null;
-    let availabilityCategory: any = null;
     let assignmentCategory: any = null;
 
     // Filter state
     let selectedServiceId: number | null = null;
-    let selectedRoomId: string | null = null;
     let dateRange: number = 28; // days
 
     // Initialize and load data
@@ -166,9 +164,9 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
             const end = endDate.toISOString().split('T')[0];
             
             console.log('[Disponent] Loading events from', today, 'to', end);
-            const response = await churchtoolsClient.get(`/events?from=${today}&to=${end}&limit=100&include=eventServices`);
+            const response = await churchtoolsClient.get(`/events?from=${today}&to=${end}&limit=100&include=eventServices`) as { data?: Event[] };
             console.log('[Disponent] Events response:', response);
-            events = response.data || response || [];
+            events = response.data || (response as unknown as Event[]) || [];
             console.log('[Disponent] Loaded events:', events.length);
         } catch (error) {
             console.error('[Disponent] Failed to load events:', error);
@@ -180,9 +178,9 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
     async function loadServices(): Promise<void> {
         try {
             console.log('[Disponent] Loading services for category:', serviceCategoryId);
-            const response = await churchtoolsClient.get(`/services?servicegroup_id=${serviceCategoryId}`);
+            const response = await churchtoolsClient.get(`/services?servicegroup_id=${serviceCategoryId}`) as { data?: Service[] };
             console.log('[Disponent] Services response:', response);
-            services = response.data || response || [];
+            services = response.data || (response as unknown as Service[]) || [];
             console.log('[Disponent] Loaded services:', services.length);
         } catch (error) {
             console.error('[Disponent] Failed to load services:', error);
@@ -195,12 +193,11 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
         try {
             if (!moduleId) return;
 
-            let category = await getCustomDataCategory<object>('availabilities');
+            const category = await getCustomDataCategory<object>('availabilities');
             if (!category) {
                 console.log('[Disponent] No availabilities category found');
                 return;
             }
-            availabilityCategory = category;
 
             const values = await getCustomDataValues<Availability>(category.id, moduleId);
             
@@ -250,7 +247,7 @@ const disponentEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsC
     // Load persons
     async function loadPersons(): Promise<void> {
         try {
-            const response = await churchtoolsClient.get('/persons?limit=500');
+            const response = await churchtoolsClient.get('/persons?limit=500') as { data?: Person[] };
             const personList = response.data || [];
             
             persons.clear();

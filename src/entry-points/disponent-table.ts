@@ -1,6 +1,6 @@
 import type { EntryPoint } from '../lib/main';
 import type { MainModuleData } from '@churchtools/extension-points/main';
-import { getModule, getCustomDataCategory, getCustomDataValues, createCustomDataValue, updateCustomDataValue, createCustomDataCategory } from '../utils/kv-store';
+import { getModule, getCustomDataCategory, getCustomDataValues, createCustomDataCategory } from '../utils/kv-store';
 
 /**
  * Disponent Table Entry Point
@@ -69,7 +69,7 @@ interface Person {
     [key: string]: any;
 }
 
-const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient, KEY, user }) => {
+const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient, KEY, user: _user }) => {
     console.log('[Disponent-Table] Initializing');
 
     let serviceCategoryId: string | null = null;
@@ -81,12 +81,8 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
     let isLoading = true;
     let errorMessage = '';
     let moduleId: number | null = null;
-    let availabilityCategory: any = null;
-    let assignmentCategory: any = null;
 
     // Filter state
-    let selectedRoomId: string | null = null;
-    let selectedCalendarIds: string[] = [];
     let dateRange: number = 28;
 
     async function initialize() {
@@ -158,8 +154,8 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
             endDate.setDate(endDate.getDate() + dateRange);
             const end = endDate.toISOString().split('T')[0];
             
-            const response = await churchtoolsClient.get(`/events?from=${today}&to=${end}&limit=100&include=eventServices`);
-            events = response.data || response || [];
+            const response = await churchtoolsClient.get(`/events?from=${today}&to=${end}&limit=100&include=eventServices`) as { data?: Event[] };
+            events = response.data || (response as unknown as Event[]) || [];
         } catch (error) {
             console.error('[Disponent-Table] Failed to load events:', error);
             events = [];
@@ -168,8 +164,8 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
 
     async function loadServices(): Promise<void> {
         try {
-            const response = await churchtoolsClient.get(`/services?servicegroup_id=${serviceCategoryId}`);
-            services = response.data || response || [];
+            const response = await churchtoolsClient.get(`/services?servicegroup_id=${serviceCategoryId}`) as { data?: Service[] };
+            services = response.data || (response as unknown as Service[]) || [];
         } catch (error) {
             console.error('[Disponent-Table] Failed to load services:', error);
             services = [];
@@ -180,9 +176,8 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
         try {
             if (!moduleId) return;
 
-            let category = await getCustomDataCategory<object>('availabilities');
+            const category = await getCustomDataCategory<object>('availabilities');
             if (!category) return;
-            availabilityCategory = category;
 
             const values = await getCustomDataValues<Availability>(category.id, moduleId);
             
@@ -209,7 +204,6 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
                     description: 'Service assignments',
                 }, moduleId);
             }
-            assignmentCategory = category;
 
             const values = await getCustomDataValues<Assignment>(category.id, moduleId);
             
@@ -270,8 +264,8 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
                 const url = `/persons?${params.toString()}`;
                 
                 try {
-                    const response = await churchtoolsClient.get(url);
-                    const personList = response.data || response || [];
+                    const response = await churchtoolsClient.get(url) as { data?: Person[] };
+                    const personList = response.data || (response as unknown as Person[]) || [];
                     
                     personList.forEach((p: Person) => {
                         persons.set(p.id, p);
@@ -448,7 +442,7 @@ const disponentTableEntryPoint: EntryPoint<MainModuleData> = ({ element, churcht
     }
 
     function renderEventRow(event: Event) {
-        const { date, time } = formatDateTime(event.startDate);
+        const { date, time: _time } = formatDateTime(event.startDate);
         const timeRange = formatTimeRange(event.startDate, event.endDate);
         const room = getEventRoom(event);
 

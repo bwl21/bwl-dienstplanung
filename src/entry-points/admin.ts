@@ -76,7 +76,7 @@ const adminEntryPoint: EntryPoint<AdminData> = ({ data, emit, element, KEY, chur
     async function loadServiceCategories() {
         try {
             console.log('[Admin] Loading service categories...');
-            const response = await churchtoolsClient.get('/event/masterdata');
+            const response = await churchtoolsClient.get('/event/masterdata') as { serviceGroups?: any[]; data?: { serviceGroups?: any[] } };
             console.log('[Admin] Raw response:', response);
             
             // ChurchTools API returns data directly or wrapped in data property

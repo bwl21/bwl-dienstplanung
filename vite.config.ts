@@ -64,17 +64,20 @@ export default ({ mode }) => {
         },
         build: isDevelopment ? {} : (buildMode === 'advanced' ? advancedBuildConfig : simpleBuildConfig),
         plugins: isDevelopment ? [] : [
-            // Copy manifest.json to dist after build
+            // Copy manifest.json and index.html to dist after build
             {
-                name: 'copy-manifest',
+                name: 'copy-assets',
                 closeBundle() {
-                    const manifestSource = resolve(__dirname, 'manifest.json');
-                    const manifestDest = resolve(__dirname, 'dist/manifest.json');
-                    try {
-                        copyFileSync(manifestSource, manifestDest);
-                        console.log('✓ Copied manifest.json to dist/');
-                    } catch (error) {
-                        console.error('Failed to copy manifest.json:', error);
+                    const filesToCopy = ['manifest.json', 'index.html'];
+                    for (const file of filesToCopy) {
+                        const source = resolve(__dirname, file);
+                        const dest = resolve(__dirname, 'dist', file);
+                        try {
+                            copyFileSync(source, dest);
+                            console.log(`✓ Copied ${file} to dist/`);
+                        } catch (error) {
+                            console.error(`Failed to copy ${file}:`, error);
+                        }
                     }
                 },
             },
