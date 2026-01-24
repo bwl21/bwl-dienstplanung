@@ -1,3 +1,5 @@
+# This Repo is entirely outdated and will be removed soon
+
 # ChurchTools Extension Boilerplate
 
 A modern, TypeScript-based boilerplate for building ChurchTools extensions with full type safety, hot-reload development, and flexible deployment options.
