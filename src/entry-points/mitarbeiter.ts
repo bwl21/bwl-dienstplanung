@@ -9,9 +9,20 @@ import { getModule, getCustomDataCategory, getCustomDataValues, createCustomData
  * Ermöglicht Dienstbesetzern die Meldung ihrer Verfügbarkeit (Ja/Vielleicht/Nein).
  */
 
-interface DienstplanungSettings {
-    key: string;
-    value: string;
+interface ScenarioConfig {
+    shortName: string;
+    name: string;
+    description: string;
+    calendarIds: number[];
+    serviceCategoryIds: number[];
+    serviceGroupIds: number[];
+    disponentPermissions: number[];
+    mitarbeiterPermissions: number[];
+    createdAt: string;
+    createdBy: number;
+    // Metadata from Custom Data Value:
+    id?: number;
+    dataCategoryId?: number;
 }
 
 interface Event {
@@ -20,6 +31,11 @@ interface Event {
     startDate: string;
     endDate?: string;
     eventServices?: EventService[];
+    calendar?: {
+        id?: number;
+        title: string;
+        domainIdentifier: string;
+    };
     [key: string]: any;
 }
 
@@ -50,7 +66,8 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
     console.log('[Dienstplanung] Initializing');
     console.log('[Dienstplanung] Current user:', user);
 
-    let serviceCategoryId: string | null = null;
+    let scenarios: ScenarioConfig[] = [];
+    let currentScenario: ScenarioConfig | null = null;
     let events: Event[] = [];
     let services: Service[] = [];
     let availabilities: Map<string, Availability> = new Map();
@@ -65,11 +82,11 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
             isLoading = true;
             render();
 
-            // Load service category from settings
+            // Load scenarios
             await loadSettings();
 
-            if (!serviceCategoryId) {
-                errorMessage = 'Keine Dienstkategorie konfiguriert. Bitte in den Admin-Einstellungen konfigurieren.';
+            if (!currentScenario) {
+                errorMessage = 'Kein Szenario konfiguriert. Bitte in den Admin-Einstellungen ein Szenario erstellen.';
                 isLoading = false;
                 render();
                 return;
@@ -85,7 +102,7 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
             console.log('[Dienstplanung] Loaded data:', {
                 events: events.length,
                 services: services.length,
-                serviceCategoryId,
+                scenario: currentScenario?.shortName,
                 eventsWithServices: events.filter(e => (e.eventServices || []).length > 0).length
             });
 
@@ -101,30 +118,49 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
     }
 
     // Load service category from settings
+    async function loadScenarios(): Promise<ScenarioConfig[]> {
+        try {
+            const extensionModule = await getModule(KEY);
+            const category = await getCustomDataCategory<object>('scenarios');
+            
+            if (!category) return [];
+            
+            return await getCustomDataValues<ScenarioConfig>(category.id, extensionModule.id);
+        } catch (error) {
+            console.error('[Dienstplanung] Failed to load scenarios:', error);
+            return [];
+        }
+    }
+
     async function loadSettings(): Promise<void> {
         try {
             const extensionModule = await getModule(KEY);
             moduleId = extensionModule.id;
 
-            const settingsCategory = await getCustomDataCategory<object>('settings');
-            if (!settingsCategory) {
-                console.log('[Dienstplanung] No settings found');
-                return;
-            }
-
-            const values = await getCustomDataValues<DienstplanungSettings>(
-                settingsCategory.id,
-                extensionModule.id
-            );
-
-            const serviceCatValue = values.find((v) => v.key === 'serviceCategory');
-            if (serviceCatValue) {
-                serviceCategoryId = serviceCatValue.value;
-                console.log('[Dienstplanung] Loaded service category:', serviceCategoryId);
+            // Load scenarios
+            scenarios = await loadScenarios();
+            
+            if (scenarios.length > 0) {
+                // Try to load saved scenario from localStorage
+                const savedScenarioShortName = localStorage.getItem('bwl-dienstplanung-scenario');
+                currentScenario = scenarios.find(s => s.shortName === savedScenarioShortName) || scenarios[0];
+                console.log('[Dienstplanung] Using scenario:', currentScenario.name);
             }
         } catch (error) {
             console.log('[Dienstplanung] Could not load settings:', error);
         }
+    }
+    
+    async function switchScenario(scenarioId: string) {
+        const newScenario = scenarios.find(s => s.shortName === scenarioId);
+        if (!newScenario) return;
+        
+        currentScenario = newScenario;
+        localStorage.setItem('bwl-dienstplanung-scenario', scenarioId);
+        console.log('[Dienstplanung] Switched to scenario:', currentScenario.name);
+        
+        // Reload data
+        await initialize();
     }
 
     // Load upcoming events with their requested services
@@ -132,9 +168,21 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
         try {
             const today = new Date().toISOString().split('T')[0];
             console.log('[Dienstplanung] Loading events from', today);
-            const response = await churchtoolsClient.get(`/events?from=${today}&limit=50&include=eventServices`);
+            const response = await churchtoolsClient.get(`/events?from=${today}&limit=50&include=eventServices`) as any;
             console.log('[Dienstplanung] Events response:', response);
-            events = response.data || response || [];
+            let allEvents = response.data || response || [];
+            
+            // Filter events by scenario criteria
+            if (currentScenario && currentScenario.calendarIds.length > 0) {
+                events = allEvents.filter((event: Event) => {
+                    const calendarId = event.calendar?.id || event.calendar?.domainIdentifier;
+                    if (!calendarId) return false;
+                    return currentScenario!.calendarIds.includes(Number(calendarId));
+                });
+                console.log(`[Dienstplanung] Filtered ${allEvents.length} events to ${events.length} by calendar`);
+            } else {
+                events = allEvents;
+            }
             console.log('[Dienstplanung] Loaded events:', events.length);
         } catch (error) {
             console.error('[Dienstplanung] Failed to load events:', error);
@@ -145,10 +193,32 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
     // Load services for the configured category
     async function loadServices(): Promise<void> {
         try {
-            console.log('[Dienstplanung] Loading services for category:', serviceCategoryId);
-            const response = await churchtoolsClient.get(`/services?servicegroup_id=${serviceCategoryId}`);
-            console.log('[Dienstplanung] Services response:', response);
-            services = response.data || response || [];
+            let allServices = [];
+            
+            if (currentScenario && currentScenario.serviceCategoryIds.length > 0) {
+                // Load services for all configured categories
+                for (const categoryId of currentScenario.serviceCategoryIds) {
+                    try {
+                        const response = await churchtoolsClient.get(`/services?servicegroup_id=${categoryId}`) as any;
+                        const categoryServices = response.data || response || [];
+                        allServices.push(...categoryServices);
+                    } catch (error) {
+                        console.error(`[Dienstplanung] Failed to load services for category ${categoryId}:`, error);
+                    }
+                }
+                
+                // Filter by service groups if configured
+                if (currentScenario.serviceGroupIds.length > 0) {
+                    services = allServices.filter((service: Service) => {
+                        return currentScenario!.serviceGroupIds.includes(service.serviceGroupId);
+                    });
+                    console.log(`[Dienstplanung] Filtered ${allServices.length} services to ${services.length} by service groups`);
+                } else {
+                    services = allServices;
+                }
+            } else {
+                services = [];
+            }
             console.log('[Dienstplanung] Loaded services:', services.length);
         } catch (error) {
             console.error('[Dienstplanung] Failed to load services:', error);
@@ -256,7 +326,8 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
     function render() {
         element.innerHTML = `
             <div style="padding: 2rem; max-width: 1200px; margin: 0 auto;">
-                <h1 style="margin: 0 0 1.5rem 0; font-size: 1.8rem;">Dienstplanung</h1>
+                <h1 style="margin: 0 0 1.5rem 0; font-size: 1.8rem;">Dienstplanung - Mitarbeiter</h1>
+                ${renderScenarioSelector()}
 
                 ${
                     isLoading
@@ -295,7 +366,7 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
             const requestedServices = (event.eventServices || [])
                 .filter(es => {
                     const service = services.find(s => s.id === es.serviceId);
-                    return service && service.serviceGroupId.toString() === serviceCategoryId;
+                    return service !== undefined;
                 });
             return requestedServices.length > 0;
         });
@@ -317,13 +388,42 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
             </div>
         `;
     }
+    
+    function renderScenarioSelector() {
+        if (scenarios.length === 0) return '';
+        
+        return `
+            <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 1rem; margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">
+                    Planungsszenario:
+                </label>
+                <select 
+                    id="scenario-selector" 
+                    style="width: 100%; max-width: 400px; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
+                >
+                    ${scenarios.map(scenario => `
+                        <option value="${scenario.shortName}" ${currentScenario?.shortName === scenario.shortName ? 'selected' : ''}>
+                            ${scenario.name} - ${scenario.description}
+                        </option>
+                    `).join('')}
+                </select>
+                ${currentScenario ? `
+                    <div style="margin-top: 0.5rem; font-size: 0.85rem; color: #666;">
+                        Kalender: ${currentScenario.calendarIds.length || 'Alle'} | 
+                        Kategorien: ${currentScenario.serviceCategoryIds.length || 'Alle'} | 
+                        Gruppen: ${currentScenario.serviceGroupIds.length || 'Alle'}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
 
     function renderEvent(event: Event) {
-        // Get requested services for this event (only services in the configured category)
+        // Get requested services for this event (only services in the current scenario)
         const requestedServices = (event.eventServices || [])
             .filter(es => {
                 const service = services.find(s => s.id === es.serviceId);
-                return service && service.serviceGroupId.toString() === serviceCategoryId;
+                return service !== undefined;
             })
             .map(es => {
                 const service = services.find(s => s.id === es.serviceId);
@@ -407,6 +507,15 @@ const mainEntryPoint: EntryPoint<MainModuleData> = ({ element, churchtoolsClient
 
     // Attach event handlers
     function attachEventHandlers() {
+        // Scenario selector
+        const scenarioSelector = element.querySelector('#scenario-selector') as HTMLSelectElement;
+        if (scenarioSelector) {
+            scenarioSelector.addEventListener('change', (e) => {
+                const selectedId = (e.target as HTMLSelectElement).value;
+                switchScenario(selectedId);
+            });
+        }
+        
         const buttons = element.querySelectorAll('.availability-btn');
         buttons.forEach(btn => {
             btn.addEventListener('click', async (e) => {

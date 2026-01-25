@@ -217,7 +217,7 @@ export async function getCustomDataValues<T extends object>(
         );
 
     return values.map((val) => {
-        const { value, ...rest } = val;
+        const { value, id: technicalId, ...rest } = val;
 
         if (value == null) {
             throw new Error(
@@ -230,6 +230,7 @@ export async function getCustomDataValues<T extends object>(
         return {
             ...rest,
             ...parsedData,
+            id: technicalId, // Ensure technical ID is preserved
         };
     });
 }
